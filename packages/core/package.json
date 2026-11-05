@@ -1,0 +1,25 @@
+{
+  "name": "@paron-wif/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Paron WIF domain core: contract-exact deterministic simulation engine, coded judge tour, autonomous CFO compute agent and typed ABIs.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./abi": "./src/abi/index.ts",
+    "./fixtures/tour-golden.json": "./fixtures/tour-golden.json"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@noble/curves": "1.9.1",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "typescript": "5.9.3"
+  }
+}
