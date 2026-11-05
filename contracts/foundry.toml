@@ -1,0 +1,29 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+script = "script"
+solc_version = "0.8.30"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+bytecode_hash = "none"
+fs_permissions = [
+    { access = "read-write", path = "../deployments" },
+    { access = "read", path = "../packages/core/fixtures" },
+]
+fuzz = { runs = 256 }
+
+[profile.ci]
+fuzz = { runs = 64 }
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+
+[lint]
+# Style-only notes. Public immutables keep idiomatic camelCase getters (wif(), usdg(), vault()) for ABI readability.
+exclude_lints = ["screaming-snake-case-immutable", "asm-keccak256", "unwrapped-modifier-logic"]
