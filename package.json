@@ -1,0 +1,30 @@
+{
+  "name": "paron-wif",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Paron WIF: the flat-world compute commodity exchange powered by a 4-engine $WIF on-chain flywheel.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/core",
+    "indexer",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "verify:all": "./scripts/verify-all.sh",
+    "audit:compliance": "./scripts/audit-compliance.sh",
+    "test": "npm run test:contracts && npm run test:core && npm run test:indexer",
+    "test:contracts": "cd contracts && forge test -vvv",
+    "test:core": "npm --workspace @paron-wif/core test",
+    "test:indexer": "npm --workspace @paron-wif/indexer test",
+    "typecheck": "npm --workspaces --if-present run typecheck",
+    "abi": "node scripts/export-abis.mjs",
+    "dev": "npm --workspace @paron-wif/web run dev",
+    "build": "npm --prefix web run build",
+    "indexer": "npm --workspace @paron-wif/indexer run start",
+    "agent": "npm --workspace @paron-wif/indexer run agent",
+    "e2e:local": "./scripts/e2e-local.sh"
+  }
+}
