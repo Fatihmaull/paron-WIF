@@ -170,12 +170,11 @@ export function createGenesisWorld(): World {
   ledger.advance(6 * hour);
   ledger.buySeriesOrPlaceBid(g.flatline.address, series.jkt, 2_900n, 2_180_000n, true);
   ledger.buySeriesOrPlaceBid(g.flatline.address, series.btm, 2_800n, 2_240_000n, true);
-  ledger.buySeriesOrPlaceBid(g.flatline.address, series.sgp, 2_200n, 2_310_000n, true);
+  ledger.buySeriesOrPlaceBid(g.flatline.address, series.sgp, 2_400n, 2_310_000n, true);
   ledger.advance(12 * hour);
   ledger.buySeriesOrPlaceBid(g.routerAgent.address, series.jkt, 2_400n, 2_180_000n, true);
   ledger.buySeriesOrPlaceBid(g.routerAgent.address, series.btm, 1_300n, 2_240_000n, true);
-  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.btm, 260n, 2_240_000n, true);
-  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.sgp, 40n, 2_310_000n, true);
+  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.btm, 150n, 2_240_000n, true);
   ledger.buySeriesOrPlaceBid(g.lab.address, series.jkt, 180n, 2_210_000n, false);
 
   // Corridor election, epoch 0
@@ -250,7 +249,7 @@ export function createGenesisWorld(): World {
   ledger.voteForComputeCorridor(g.community.address, 3, 61_000n * WIF);
   ledger.voteForComputeCorridor(g.community.address, 2, 24_000n * WIF);
   ledger.advance(hour);
-  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.jkt, 60n, 2_190_000n, true);
+  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.jkt, 30n, 2_190_000n, true);
   ledger.advance(6 * hour);
 
   world.actors = { ...g };

@@ -76,7 +76,7 @@ if git rev-parse --verify HEAD >/dev/null 2>&1; then
   hist=$(git log HEAD -p | grep -oiE 'infura\.io/v3/[0-9a-f]{32}|alchemy(api)?\.(com|io)/v2/[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{36}|-----BEGIN ([A-Z]+ )?PRIVATE KEY-----' | sort -u || true)
   if [ -n "$hist" ]; then
     printf '\033[33m%s\033[0m\n' "history (info): pre-patch commits contain forge-std's public default RPC id, not a project credential:"
-    echo "$hist" | sed 's/^/  /'
+    echo "$hist" | sed -E 's#(v3/)[0-9a-fA-F]{32}#\1<forge-std default id>#; s/^/  /'
   else
     green "history: no keyed RPC URLs or tokens in any commit"
   fi
