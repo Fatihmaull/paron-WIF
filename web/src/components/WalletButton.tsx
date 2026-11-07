@@ -14,7 +14,7 @@ export function WalletButton() {
     return (
       <div className="menu">
         <button className="btn ghost" type="button" onClick={() => setOpen((v) => !v)} disabled={connecting} aria-expanded={open}>
-          {connecting ? "Waiting for wallet…" : "Connect wallet"}
+          {connecting ? "Waiting…" : <><span className="wide-only">Connect wallet</span><span className="narrow-only">Connect</span></>}
         </button>
         {open ? (
           <div className="menu-pop" role="menu">

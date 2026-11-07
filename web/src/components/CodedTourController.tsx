@@ -36,7 +36,7 @@ function BarRow({ label, value, max, tone, note }: { label: string; value: numbe
         <span className="num">{note}</span>
       </div>
       <div className="bar" style={{ height: 12 }}>
-        <span className={tone} style={{ width: `${Math.max(2, (value / max) * 100)}%`, transition: "width 600ms" }} />
+        <span className={tone} style={{ width: `${value > 0 ? Math.max(2, (value / max) * 100) : 0}%`, transition: "width 600ms" }} />
       </div>
     </div>
   );

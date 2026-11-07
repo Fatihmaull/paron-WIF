@@ -82,8 +82,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className={`dot ${mode === "live" ? "" : "sim"}`} />
             {mode === "live" ? `Live · ${appConfig.chainName} · ${appConfig.chainId}` : "Simulation · deterministic"}
           </span>
-          <Link className="btn" href="/tour">
-            ▶ 60-Second Judge Tour
+          <Link className="btn" href="/tour" aria-label="Play the 60-second judge tour">
+            <span className="wide-only">▶ 60-Second Judge Tour</span>
+            <span className="narrow-only">▶ Tour</span>
           </Link>
           <WalletButton />
         </div>
