@@ -109,7 +109,8 @@ export class ChainIndexer {
 
   /** One sync pass up to head - confirmations. Returns the number of new events. */
   async syncOnce(): Promise<number> {
-    const latest = await withRetry(() => this.client.getBlockNumber());
+    // cacheTime 0: viem otherwise reuses a block number for 4 s and a sync right after new blocks misses them.
+    const latest = await withRetry(() => this.client.getBlockNumber({ cacheTime: 0 }));
     this.head = latest;
     const target = latest - this.cfg.confirmations;
     if (target <= this.cursor) return 0;
