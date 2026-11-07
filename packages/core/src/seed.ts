@@ -136,7 +136,7 @@ export const SANDBOX_GENESIS_TIME = SIM_GENESIS_TIME - 7n * 86_400n;
  * ~4.85M $WIF staked, ~1.4M $WIF burned, an ~$18k juror upside pool and ~12k CU open interest.
  */
 export function createGenesisWorld(): World {
-  const world = createProtocolWorld({ genesisTime: SANDBOX_GENESIS_TIME, sponsorJuryPool: 22_000n * USDG });
+  const world = createProtocolWorld({ genesisTime: SANDBOX_GENESIS_TIME, sponsorJuryPool: 18_000n * USDG });
   const { ledger, series } = world;
   const g = GENESIS_ACTORS;
   const hour = 3_600;
@@ -168,14 +168,14 @@ export function createGenesisWorld(): World {
   ledger.mintPrimarySeries(g.johor.address, series.jkt, 800n, 2_250_000n);
 
   ledger.advance(6 * hour);
-  ledger.buySeriesOrPlaceBid(g.flatline.address, series.jkt, 2_600n, 2_180_000n, true);
-  ledger.buySeriesOrPlaceBid(g.flatline.address, series.btm, 2_200n, 2_240_000n, true);
-  ledger.buySeriesOrPlaceBid(g.flatline.address, series.sgp, 1_500n, 2_310_000n, true);
+  ledger.buySeriesOrPlaceBid(g.flatline.address, series.jkt, 2_900n, 2_180_000n, true);
+  ledger.buySeriesOrPlaceBid(g.flatline.address, series.btm, 2_800n, 2_240_000n, true);
+  ledger.buySeriesOrPlaceBid(g.flatline.address, series.sgp, 2_200n, 2_310_000n, true);
   ledger.advance(12 * hour);
   ledger.buySeriesOrPlaceBid(g.routerAgent.address, series.jkt, 2_400n, 2_180_000n, true);
-  ledger.buySeriesOrPlaceBid(g.routerAgent.address, series.btm, 1_100n, 2_240_000n, true);
-  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.btm, 900n, 2_240_000n, true);
-  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.sgp, 700n, 2_310_000n, true);
+  ledger.buySeriesOrPlaceBid(g.routerAgent.address, series.btm, 1_300n, 2_240_000n, true);
+  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.btm, 260n, 2_240_000n, true);
+  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.sgp, 40n, 2_310_000n, true);
   ledger.buySeriesOrPlaceBid(g.lab.address, series.jkt, 180n, 2_210_000n, false);
 
   // Corridor election, epoch 0
@@ -214,7 +214,14 @@ export function createGenesisWorld(): World {
   deliverSigned(ledger, g.batam, happy, "batam: 120 CU llama-405b fine-tune, p95 131ms", 131, 9_996);
   ledger.confirmDelivery(g.cfoAgent.address, happy);
 
-  ledger.advance(6 * hour);
+  ledger.advance(2 * hour);
+  const nominal = ledger.requestRedemption(g.routerAgent.address, series.jkt, 400n, 0, keccak256(toHex("router:ssh")) as Hex);
+  ledger.acknowledgeRedemption(g.nusantara.address, nominal);
+  ledger.advance(hour);
+  deliverSigned(ledger, g.nusantara, nominal, "nusantara: 400 CU qwen-72b serving, p95 147ms", 147, 9_993);
+  ledger.confirmDelivery(g.routerAgent.address, nominal);
+
+  ledger.advance(4 * hour);
   const breach = ledger.requestRedemption(g.routerAgent.address, series.jkt, 300n, 0, keccak256(toHex("router:ssh")) as Hex);
   ledger.acknowledgeRedemption(g.nusantara.address, breach);
   ledger.advance(2 * hour);
@@ -243,7 +250,7 @@ export function createGenesisWorld(): World {
   ledger.voteForComputeCorridor(g.community.address, 3, 61_000n * WIF);
   ledger.voteForComputeCorridor(g.community.address, 2, 24_000n * WIF);
   ledger.advance(hour);
-  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.jkt, 260n, 2_190_000n, true);
+  ledger.buySeriesOrPlaceBid(g.cfoAgent.address, series.jkt, 60n, 2_190_000n, true);
   ledger.advance(6 * hour);
 
   world.actors = { ...g };

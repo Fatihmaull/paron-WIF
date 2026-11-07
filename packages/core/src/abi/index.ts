@@ -2328,6 +2328,11 @@ export const wifFlywheelVaultAbi = [
         "name": "bps",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "cap",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [

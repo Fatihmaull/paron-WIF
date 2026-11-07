@@ -45,7 +45,7 @@ library ParonWifConstants {
     uint16 internal constant SLASH_VOTER_SHARE_BPS = 5_000; // 50% of the remaining slashed margin
     uint16 internal constant SLASH_BURN_SHARE_BPS = 2_500; // 25% bought back and burned as $WIF
     // The remaining 25% refills The Paron Vault jury pool.
-    uint16 internal constant JURY_POOL_DRAW_BPS = 2_000; // each resolved dispute draws 20% of the vault jury pool
+    uint16 internal constant JURY_POOL_DRAW_BPS = 2_000; // each resolved dispute draws 20% of the vault jury pool, capped at its margin
     uint16 internal constant JURY_WIF_BONUS_BPS = 1_000; // winners receive a bonus of 10% of winning votes in $WIF
     uint256 internal constant DISPUTE_FILING_BURN = 100e18; // filing burns 100 $WIF and counts as SLASH votes
     uint16 internal constant BUYBACK_SELL_DISCOUNT_BPS = 100; // sellers into the buyback desk take a 1% haircut

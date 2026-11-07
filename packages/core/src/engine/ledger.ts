@@ -809,9 +809,10 @@ export class ParonLedger {
     return wifBurned;
   }
 
-  private vaultDrawJuryReward(bps: bigint): bigint {
+  private vaultDrawJuryReward(bps: bigint, cap: bigint): bigint {
     const v = this.s.vault;
-    const out = (v.juryRewardPoolUsdg * bps) / BPS;
+    let out = (v.juryRewardPoolUsdg * bps) / BPS;
+    if (out > cap) out = cap;
     if (out === 0n) return 0n;
     v.juryRewardPoolUsdg -= out;
     this.move(this.s.usdg, this.s.addr.vault, this.s.addr.jury, out);
@@ -1383,7 +1384,7 @@ export class ParonLedger {
       let rewardUsdg = 0n;
       if (slashed) rewardUsdg = this.slash(d.redemptionId, true);
       else this.finalizeRedemption(d.redemptionId);
-      rewardUsdg += this.vaultDrawJuryReward(JURY_POOL_DRAW_BPS);
+      rewardUsdg += this.vaultDrawJuryReward(JURY_POOL_DRAW_BPS, r.marginUsdg);
       const winningVotes = slashed ? d.slashVotes : d.upholdVotes;
       const bonusWif = this.vaultDrawJuryBonusWif((winningVotes * JURY_WIF_BONUS_BPS) / BPS);
       d.rewardPoolUsdg = rewardUsdg;
