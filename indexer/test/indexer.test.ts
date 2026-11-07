@@ -7,6 +7,12 @@ import { createApiHandler } from "../src/api.ts";
 import { applyEvent, bookLevels, createView, fromLedgerEvents, openInterest } from "../src/reducer.ts";
 import { backoffMs, getLogsAdaptive, isRangeError, isTransient, withRetry } from "../src/rpc.ts";
 import { simulationSource } from "../src/server.ts";
+import { ChainIndexer } from "../src/indexer.ts";
+import { loadConfig, type Manifest } from "../src/config.ts";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { PublicClient } from "viem";
 
 test("reducer rebuilds the exact flywheel state from events alone (cross-validated against the ledger)", () => {
   for (const ledger of [createGenesisWorld().ledger, runFullTour().world.ledger]) {
@@ -95,4 +101,30 @@ test("REST API serves the flywheel read model (simulation fallback, zero config)
   } finally {
     server.close();
   }
+});
+
+test("indexer always reads a fresh chain head (no cached block number)", async () => {
+  const calls: unknown[] = [];
+  const fake = {
+    getBlockNumber: async (args?: unknown) => {
+      calls.push(args);
+      return 0n;
+    },
+  } as unknown as PublicClient;
+  const manifest = {
+    chainId: 31337,
+    startBlock: 0,
+    contracts: {
+      WifToken: "0x0000000000000000000000000000000000000001",
+      Usdg: "0x0000000000000000000000000000000000000002",
+      ParonSeriesToken: "0x0000000000000000000000000000000000000003",
+      WifFlywheelVault: "0x0000000000000000000000000000000000000004",
+      WifSlaJury: "0x0000000000000000000000000000000000000005",
+      ParonExchangeDesk: "0x0000000000000000000000000000000000000006",
+    },
+  } as unknown as Manifest;
+  const cfg = { ...loadConfig({}), dataDir: mkdtempSync(join(tmpdir(), "paron-wif-idx-")) };
+  const indexer = new ChainIndexer(cfg, manifest, fake);
+  assert.equal(await indexer.syncOnce(), 0);
+  assert.deepEqual(calls, [{ cacheTime: 0 }]);
 });

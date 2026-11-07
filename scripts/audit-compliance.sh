@@ -70,6 +70,18 @@ else
   green "secrets: no private keys, keyed RPC URLs or API tokens found"
 fi
 
+# History report (informational): the first commits vendored forge-std verbatim, whose StdChains.sol
+# ships Foundry's public default Infura project id. It is patched at HEAD; squash-merge to drop it.
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+  hist=$(git log HEAD -p | grep -oiE 'infura\.io/v3/[0-9a-f]{32}|alchemy(api)?\.(com|io)/v2/[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{36}|-----BEGIN ([A-Z]+ )?PRIVATE KEY-----' | sort -u || true)
+  if [ -n "$hist" ]; then
+    printf '\033[33m%s\033[0m\n' "history (info): pre-patch commits contain forge-std's public default RPC id, not a project credential:"
+    echo "$hist" | sed 's/^/  /'
+  else
+    green "history: no keyed RPC URLs or tokens in any commit"
+  fi
+fi
+
 # ---- 3. Env files -----------------------------------------------------------
 if tracked=$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '\.env\.example$'); then
   red "env: populated env files are tracked:"; echo "$tracked"; fail=1
