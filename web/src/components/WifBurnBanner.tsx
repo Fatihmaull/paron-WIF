@@ -40,17 +40,17 @@ export function WifBurnBanner() {
         </span>
       </div>
       <div className="tele-cell stake">
-        <span className="tele-label">🔒 $WIF locked in margin boost vaults</span>
+        <span className="tele-label">🔒 $WIF staked in margin vaults</span>
         <Counter className="tele-value" value={wifToNumber(f.totalWifStaked)} format={(n) => `${fmtInt(n)} $WIF`} />
-        <span className="tele-sub">{stakers} providers · Tier-2 Prime ≥ 100,000 $WIF → 25% margin</span>
+        <span className="tele-sub">{stakers} providers · 100k $WIF staked = 25% margin</span>
       </div>
       <div className="tele-cell vault">
-        <span className="tele-label">💎 The Paron Vault · voter &amp; staker upside</span>
+        <span className="tele-label">💎 Paron Vault · voter upside pool</span>
         <Counter className="tele-value" value={usdgToNumber(f.juryRewardPoolUsdg)} format={(n) => `${fmtUsd(n)} USDG`} />
-        <span className="tele-sub">+{fmtInt(wifToNumber(f.juryBonusWifPool))} bonus $WIF · {fmtUsd(usdgToNumber(f.totalRebatesDistributedUsdg))} rebates streamed</span>
+        <span className="tele-sub">+{fmtInt(wifToNumber(f.juryBonusWifPool))} bonus $WIF · {fmtUsd(usdgToNumber(f.totalRebatesDistributedUsdg))} rebates</span>
       </div>
       <div className="tele-cell oi">
-        <span className="tele-label">⚡ Standardized compute open interest</span>
+        <span className="tele-label">⚡ Compute open interest</span>
         <Counter className="tele-value" value={Number(f.openInterestCu)} format={(n) => `${fmtInt(n)} CU`} />
         <span className="tele-sub">H100-eq hours · CRI-H100 {fmtUsd(usdgToNumber(snapshot.cri.price))}/CU</span>
       </div>

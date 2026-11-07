@@ -27,8 +27,8 @@ export function LifecycleStepper({ r }: { r: Redemption }) {
         return (
           <div key={label} className="life-step" data-state={st}>
             <b>{i === 4 ? (r.state === "Slashed" ? "Slashed" : r.state === "Finalized" ? "Finalized" : "Settles") : label}</b>
-            {i === 0 ? <span>ack by <Countdown to={r.ackDeadline} /></span> : null}
-            {i === 1 && r.deliveryDeadline ? <span>deliver by <Countdown to={r.deliveryDeadline} /></span> : null}
+            {i === 0 && st === "now" ? <span>ack in <Countdown to={r.ackDeadline} /></span> : null}
+            {i === 1 && st === "now" && r.deliveryDeadline ? <span>deliver in <Countdown to={r.deliveryDeadline} /></span> : null}
             {i === 2 && r.challengeDeadline ? <span>p95 {r.p95LatencyMs}ms · {(r.uptimeBps / 100).toFixed(2)}%</span> : null}
             {i === 3 && r.disputeId ? <span>dispute #{r.disputeId}</span> : null}
           </div>

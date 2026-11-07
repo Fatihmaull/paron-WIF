@@ -390,3 +390,18 @@ input[type="range"].slider { width: 100%; accent-color: var(--accent); }
 .g-desk { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(0, 1.1fr); }
 @media (max-width: 1180px) { .g-desk { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .g-desk { grid-template-columns: minmax(0, 1fr); } }
+
+/* Responsive header: nav drops to its own scrollable row on phones */
+.narrow-only { display: none; }
+@media (max-width: 760px) {
+  .topbar { flex-wrap: wrap; height: auto; padding: 8px 12px 0; row-gap: 0; }
+  .topbar-spacer { display: none; }
+  .topbar-actions { margin-left: auto; gap: 6px; }
+  .topbar .nav { order: 10; width: 100%; }
+  .topbar .nav a { height: 40px; padding: 0 10px; }
+  .wide-only { display: none; }
+  .narrow-only { display: inline; }
+  .brand-word { font-size: 12px; letter-spacing: 0.14em; }
+  .banner { padding: 8px 12px; flex-wrap: wrap; }
+  .banner > span[style] { margin-left: 0 !important; }
+}
