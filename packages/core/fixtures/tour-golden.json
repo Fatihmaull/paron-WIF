@@ -1,7 +1,14 @@
 {
   "description": "Golden numbers for the 6-step Paron WIF coded judge tour. Asserted by contracts/test/ParonWifTour.t.sol (on-chain execution) and packages/core/test/tour.test.ts (deterministic TypeScript engine). Both must match to the last unit.",
-  "units": { "usdg": "6 decimals", "wif": "18 decimals", "cu": "whole compute units" },
-  "params": { "wifPriceUsdg": "500", "criH100Usdg": "2200000" },
+  "units": {
+    "usdg": "6 decimals",
+    "wif": "18 decimals",
+    "cu": "whole compute units"
+  },
+  "params": {
+    "wifPriceUsdg": "500",
+    "criH100Usdg": "2200000"
+  },
   "expect": {
     "providerMarginBps": "2500",
     "providerMarginUsdg": "112000000",
@@ -18,17 +25,17 @@
     "agentSlashRefund": "64400000",
     "voterShareUsdg": "2800000",
     "slashBurnWif": "2800000000000000000000",
-    "disputeRewardPoolUsdg": "23109785",
+    "disputeRewardPoolUsdg": "16800000",
     "disputeRewardPoolWif": "510000000000000000000",
-    "jurorAUsdg": "11328325",
+    "jurorAUsdg": "8235294",
     "jurorAWif": "250000000000000000000",
-    "jurorBUsdg": "6796995",
+    "jurorBUsdg": "4941176",
     "jurorBWif": "150000000000000000000",
-    "jurorCUsdg": "4531330",
+    "jurorCUsdg": "3294117",
     "jurorCWif": "100000000000000000000",
-    "agentJurorUsdg": "453133",
+    "agentJurorUsdg": "329411",
     "agentJurorWif": "10000000000000000000",
-    "juryPoolAfter": "81239141",
+    "juryPoolAfter": "87548926",
     "corridorBtmVotes": "6500000000000000000000",
     "corridorJktVotes": "2500000000000000000000",
     "electedCorridor": "1",

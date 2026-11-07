@@ -90,6 +90,7 @@ export type ProtocolSnapshot = {
     boosted: { active: boolean; corridorId: number };
     previousFinalized: boolean;
     previousWinner: number | null;
+    previousTotal: bigint;
     tally: bigint[];
   };
   series: SeriesView[];
@@ -98,6 +99,7 @@ export type ProtocolSnapshot = {
   redemptions: Redemption[];
   disputes: Dispute[];
   burns: BurnView[];
+  burnStats: { reason: string; amount: bigint; count: number }[];
   trades: TradeView[];
   account: AccountView | null;
   params: {
@@ -126,6 +128,19 @@ export function burnsFromEvents(events: ParonEvent[], limit = 40): BurnView[] {
     });
   }
   return out;
+}
+
+export function burnStatsFromEvents(events: ParonEvent[]): ProtocolSnapshot["burnStats"] {
+  const by = new Map<string, { reason: string; amount: bigint; count: number }>();
+  for (const e of events) {
+    if (e.name !== "WifFlywheelBurned") continue;
+    const reason = String(e.args.reason);
+    const row = by.get(reason) ?? { reason, amount: 0n, count: 0 };
+    row.amount += BigInt(e.args.wifBurned);
+    row.count += 1;
+    by.set(reason, row);
+  }
+  return [...by.values()].sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0));
 }
 
 export function tradesFromEvents(events: ParonEvent[], limit = 60): TradeView[] {
@@ -226,6 +241,7 @@ export function snapshotFromLedger(ledger: ParonLedger, opts: { account?: Addres
       boosted,
       previousFinalized: epoch > 0 && ledger.epochFinalized(epoch - 1),
       previousWinner: epoch > 0 ? (ledger.epochWinner(epoch - 1) ?? null) : null,
+      previousTotal: epoch > 0 ? ledger.corridorTally(epoch - 1).reduce((a, b) => a + b, 0n) : 0n,
       tally,
     },
     series,
@@ -234,6 +250,7 @@ export function snapshotFromLedger(ledger: ParonLedger, opts: { account?: Addres
     redemptions: ledger.listRedemptions(),
     disputes: ledger.listDisputes(),
     burns: burnsFromEvents(events),
+    burnStats: burnStatsFromEvents(events),
     trades: tradesFromEvents(events),
     account: opts.account ? accountView(ledger, opts.account) : null,
     params: {

@@ -426,7 +426,7 @@ function stringifyArgs(args: ParonEvent["args"]): Record<string, string | number
   return out;
 }
 
-function flywheelRecord(l: ParonLedger): Record<string, string> {
+export function flywheelRecord(l: ParonLedger): Record<string, string> {
   const s = l.flywheelStats();
   return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, String(v)]));
 }

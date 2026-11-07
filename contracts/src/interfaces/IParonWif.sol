@@ -36,7 +36,7 @@ interface IWifFlywheelVault {
         external
         returns (uint256 wifBurned);
     function recordWifBurn(address actor, uint256 amount, string calldata reason) external;
-    function drawJuryReward(uint256 bps) external returns (uint256 usdgOut);
+    function drawJuryReward(uint256 bps, uint256 cap) external returns (uint256 usdgOut);
     function drawJuryBonusWif(uint256 wifWanted) external returns (uint256 wifOut);
 }
 
