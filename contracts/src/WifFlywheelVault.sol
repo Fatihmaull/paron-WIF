@@ -288,9 +288,12 @@ contract WifFlywheelVault is ReentrancyGuard, Ownable {
     // Loop 3 hooks (jury only)
     // ------------------------------------------------------------------
 
-    function drawJuryReward(uint256 bps) external nonReentrant returns (uint256 usdgOut) {
+    /// @notice Draws `bps` of the jury pool for one resolved dispute, capped at `cap` (the disputed
+    ///         redemption's margin) so rewards scale with the dispute and small cases cannot drain the pool.
+    function drawJuryReward(uint256 bps, uint256 cap) external nonReentrant returns (uint256 usdgOut) {
         if (msg.sender != jury) revert NotJury();
         usdgOut = (juryRewardPoolUsdg * bps) / C.BPS;
+        if (usdgOut > cap) usdgOut = cap;
         if (usdgOut == 0) return 0;
         juryRewardPoolUsdg -= usdgOut;
         usdg.safeTransfer(msg.sender, usdgOut);

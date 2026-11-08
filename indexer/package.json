@@ -1,0 +1,22 @@
+{
+  "name": "@paron-wif/indexer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Paron WIF event indexer, flywheel REST API and live runner for the autonomous CFO compute agent.",
+  "license": "MIT",
+  "scripts": {
+    "start": "node src/server.ts",
+    "agent": "node src/agent-runner.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@paron-wif/core": "*",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "typescript": "5.9.3"
+  }
+}

@@ -181,7 +181,8 @@ contract WifSlaJury is ReentrancyGuard {
     ///  SLASH: buyer refunded 100% principal + 15% from margin; remaining margin 50% to winning voters,
     ///         25% bought back and burned as $WIF, 25% to The Paron Vault jury pool.
     ///  UPHOLD: escrow and margin released to the provider.
-    ///  Either way winners also share 20% of the vault jury pool and a 10% $WIF bonus.
+    ///  Either way winners also share 20% of the vault jury pool (capped at the disputed margin) and a
+    ///  10% $WIF bonus.
     function resolveDispute(uint256 disputeId) external nonReentrant {
         Dispute storage d = _disputes[disputeId];
         if (d.status != DisputeStatus.Open) revert DisputeNotOpen(disputeId);
@@ -189,13 +190,14 @@ contract WifSlaJury is ReentrancyGuard {
 
         bool slash = d.slashVotes > d.upholdVotes;
         d.status = slash ? DisputeStatus.ResolvedSlash : DisputeStatus.ResolvedUphold;
+        uint256 drawCap = desk.getRedemption(d.redemptionId).marginUsdg;
         uint256 rewardUsdg;
         if (slash) {
             rewardUsdg = desk.executeSlash(d.redemptionId);
         } else {
             desk.executeUphold(d.redemptionId);
         }
-        rewardUsdg += vault.drawJuryReward(C.JURY_POOL_DRAW_BPS);
+        rewardUsdg += vault.drawJuryReward(C.JURY_POOL_DRAW_BPS, drawCap);
         uint256 winningVotes = slash ? d.slashVotes : d.upholdVotes;
         uint256 bonusWif = vault.drawJuryBonusWif((winningVotes * C.JURY_WIF_BONUS_BPS) / C.BPS);
         d.rewardPoolUsdg = rewardUsdg;

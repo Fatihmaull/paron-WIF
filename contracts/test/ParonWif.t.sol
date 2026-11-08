@@ -501,7 +501,8 @@ contract ParonWifTest is ParonWifBase {
         assertEq(uint8(d.status), uint8(DisputeStatus.ResolvedSlash));
         uint256 vaultShare = remainder - remainder / 2 - remainder / 4;
         uint256 draw = ((poolBefore + vaultShare) * 2_000) / 10_000;
-        assertEq(d.rewardPoolUsdg, remainder / 2 + draw, "50% of remaining margin + 20% of the vault jury pool");
+        if (draw > r.marginUsdg) draw = r.marginUsdg;
+        assertEq(d.rewardPoolUsdg, remainder / 2 + draw, "50% of remaining margin + 20% of the vault jury pool (capped)");
         assertEq(d.rewardPoolWif, (4_000e18 * 1_000) / 10_000, "10% bonus WIF");
         assertEq(uint8(desk.getRedemption(rid).state), uint8(RedemptionState.Slashed));
 
