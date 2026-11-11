@@ -84,16 +84,6 @@ library ParonSettlementLib {
         );
     }
 
-    /// @notice Keeps a provider's tier stake locked while lots minted at that tier are open.
-    function syncStakeLock(mapping(address => mapping(uint8 => uint256)) storage openLots, IWifFlywheelVault vault, address provider)
-        external
-    {
-        uint256 lockAmount;
-        if (openLots[provider][2] > 0) lockAmount = C.TIER2_STAKE;
-        else if (openLots[provider][1] > 0) lockAmount = C.TIER1_STAKE;
-        vault.setStakeLock(provider, lockAmount);
-    }
-
     /// @notice EIP-191 personal-sign digest for a delivery receipt, bound to chain and desk.
     function receiptDigest(
         address desk,
