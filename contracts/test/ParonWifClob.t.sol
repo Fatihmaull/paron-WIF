@@ -59,4 +59,34 @@ contract ParonWifClobTest is ParonWifBase {
         vm.expectRevert(abi.encodeWithSelector(ParonExchangeDesk.OrderTooSmall.selector, 1_900_000, MIN));
         desk.placeAsk(seriesJkt, 1, 1_900_000);
     }
+
+    function test_MakerCannotHoldMoreThanEightOrdersPerSide() public {
+        address p = _provider("cap-provider", 100_000e18);
+        _fund(p, 0, 100_000e6);
+        for (uint256 i; i < 8; ++i) {
+            _mint(p, seriesJkt, 10, 2_000_000 + i * 10_000);
+        }
+        assertEq(desk.activeOrdersOf(seriesJkt, false, p), 8);
+        vm.prank(p);
+        vm.expectRevert(abi.encodeWithSelector(ParonClobLib.TooManyOrders.selector, p, 8));
+        desk.mintPrimarySeries(seriesJkt, 10, 2_090_000);
+        // Bids are a separate side with their own allowance, and cancelling frees a slot.
+        assertEq(desk.activeOrdersOf(seriesJkt, true, p), 0);
+        uint256 orderId = desk.getLot(1).askOrderId;
+        vm.prank(p);
+        desk.cancelOrder(orderId);
+        assertEq(desk.activeOrdersOf(seriesJkt, false, p), 7);
+        _mint(p, seriesJkt, 10, 2_090_000);
+        assertEq(desk.activeOrdersOf(seriesJkt, false, p), 8);
+    }
+
+    function test_FilledOrdersFreeTheirSlot() public {
+        address p = _provider("slot-provider", 0);
+        _fund(p, 0, 10_000e6);
+        _mint(p, seriesJkt, 10, 2_000_000);
+        assertEq(desk.activeOrdersOf(seriesJkt, false, p), 1);
+        address buyer = _actor("slot-buyer", 0, 100e6);
+        _buy(buyer, seriesJkt, 10, 2_000_000, false);
+        assertEq(desk.activeOrdersOf(seriesJkt, false, p), 0);
+    }
 }

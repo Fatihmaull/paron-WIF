@@ -619,6 +619,11 @@ contract ParonExchangeDesk is ReentrancyGuard {
         return _clob.orderCount;
     }
 
+    /// @notice Active resting orders `maker` holds on one side of a series (cap: 8).
+    function activeOrdersOf(uint256 seriesId, bool isBid, address maker) external view returns (uint256) {
+        return _clob.activeOrders(seriesId, isBid, maker);
+    }
+
     function getRedemption(uint256 redemptionId) external view returns (Redemption memory) {
         return _redemptions[redemptionId];
     }

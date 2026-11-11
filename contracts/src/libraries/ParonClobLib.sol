@@ -22,9 +22,11 @@ library ParonClobLib {
         mapping(uint256 orderId => Order) orders;
         mapping(uint256 seriesId => mapping(bool isBid => uint256[])) levels;
         mapping(uint256 seriesId => mapping(bool isBid => mapping(uint256 price => Level))) levelOf;
+        mapping(uint256 seriesId => mapping(bool isBid => mapping(address maker => uint256 count))) makerOrders;
     }
 
     error TooManyLevels();
+    error TooManyOrders(address maker, uint256 max);
 
     /// @notice Creates a resting order and appends it to its level and lane.
     function place(
@@ -39,6 +41,9 @@ library ParonClobLib {
         uint256 escrow,
         uint256 lotId
     ) external returns (uint256 orderId) {
+        uint256 held = b.makerOrders[seriesId][isBid][maker];
+        if (held >= C.MAX_ORDERS_PER_MAKER) revert TooManyOrders(maker, C.MAX_ORDERS_PER_MAKER);
+        b.makerOrders[seriesId][isBid][maker] = held + 1;
         orderId = ++b.orderCount;
         Order storage o = b.orders[orderId];
         o.seriesId = seriesId;
@@ -87,6 +92,10 @@ library ParonClobLib {
         price = arr[arr.length - 1];
         Level storage level = b.levelOf[seriesId][isBid][price];
         orderId = level.head[0] != 0 ? level.head[0] : level.head[1];
+    }
+
+    function activeOrders(Book storage b, uint256 seriesId, bool isBid, address maker) external view returns (uint256) {
+        return b.makerOrders[seriesId][isBid][maker];
     }
 
     function bestPrices(Book storage b, uint256 seriesId) external view returns (uint256 bestBid, uint256 bestAsk) {
@@ -145,6 +154,7 @@ library ParonClobLib {
         o.prev = 0;
         o.next = 0;
         o.active = false;
+        b.makerOrders[o.seriesId][o.isBid][o.maker] -= 1;
         if (level.head[0] == 0 && level.head[1] == 0) _removePrice(b.levels[o.seriesId][o.isBid], o.price);
     }
 
