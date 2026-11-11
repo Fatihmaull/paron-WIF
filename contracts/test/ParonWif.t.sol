@@ -595,7 +595,7 @@ contract ParonWifTest is ParonWifBase {
     // ------------------------------------------------------------------
 
     function testFuzz_FeeRoutingConservesUsdg(uint32 qty, uint8 priceTicks, bool wifMode) public {
-        uint256 cu = bound(qty, 1, 5_000);
+        uint256 cu = bound(qty, 10, 5_000);
         uint256 price = bound(priceTicks, 1, 255) * 10_000 + 1_000_000;
         address p = _provider("fuzz-provider", 100_000e18);
         _fund(p, 0, 10_000e6);

@@ -163,6 +163,7 @@ contract ParonExchangeDesk is ReentrancyGuard {
     error NotWifDiscountEligible();
     error SelfTrade();
     error OrderNotActive(uint256 orderId);
+    error OrderTooSmall(uint256 notional, uint256 minNotional);
     error NotOrderMaker();
     error OutsideDeliveryWindow();
     error OutsideSettlementWindow();
@@ -294,6 +295,7 @@ contract ParonExchangeDesk is ReentrancyGuard {
         _requireTradable(seriesId);
         if (cuAmount == 0) revert ZeroAmount();
         _checkPrice(askPriceUsdg);
+        _checkMinNotional(cuAmount * askPriceUsdg);
 
         uint16 marginBps = requiredMarginBpsFor(msg.sender, seriesId);
         uint8 tier = vault.getProviderTier(msg.sender);
@@ -359,7 +361,10 @@ contract ParonExchangeDesk is ReentrancyGuard {
             _chargeTakerFee(msg.sender, seriesId, ctx.notional, useWifDiscount);
         }
         filledCu = ctx.filled;
-        if (ctx.remaining > 0) {
+        if (ctx.remaining > 0 && ctx.remaining * maxPriceUsdg < C.MIN_ORDER_NOTIONAL) {
+            // A dust remainder never rests. A pure dust order that fills nothing is rejected outright.
+            if (filledCu == 0) revert OrderTooSmall(ctx.remaining * maxPriceUsdg, C.MIN_ORDER_NOTIONAL);
+        } else if (ctx.remaining > 0) {
             uint256 cost = ctx.remaining * maxPriceUsdg;
             uint256 escrow = cost + (cost * C.STANDARD_FEE_BPS) / C.BPS;
             usdg.safeTransferFrom(msg.sender, address(this), escrow);
@@ -379,8 +384,14 @@ contract ParonExchangeDesk is ReentrancyGuard {
         _checkPrice(priceUsdg);
         series.deskTransfer(msg.sender, address(this), seriesId, cuAmount);
         filledCu = _matchAskAgainstBids(seriesId, msg.sender, cuAmount, priceUsdg, 0);
-        if (cuAmount > filledCu) {
-            orderId = _newOrder(seriesId, msg.sender, false, false, priceUsdg, cuAmount - filledCu, 0, 0);
+        uint256 rest = cuAmount - filledCu;
+        if (rest > 0) {
+            if (rest * priceUsdg >= C.MIN_ORDER_NOTIONAL) {
+                orderId = _newOrder(seriesId, msg.sender, false, false, priceUsdg, rest, 0, 0);
+            } else {
+                if (filledCu == 0) revert OrderTooSmall(rest * priceUsdg, C.MIN_ORDER_NOTIONAL);
+                series.deskTransfer(address(this), msg.sender, seriesId, rest); // dust remainder goes back
+            }
         }
     }
 
@@ -864,6 +875,10 @@ contract ParonExchangeDesk is ReentrancyGuard {
     function _requireTradable(uint256 seriesId) private view {
         SeriesInfo memory s = series.getSeries(seriesId);
         if (block.timestamp >= s.deliveryEnd) revert SeriesNotTradable(seriesId);
+    }
+
+    function _checkMinNotional(uint256 notional) private pure {
+        if (notional < C.MIN_ORDER_NOTIONAL) revert OrderTooSmall(notional, C.MIN_ORDER_NOTIONAL);
     }
 
     function _checkPrice(uint256 price) private pure {
