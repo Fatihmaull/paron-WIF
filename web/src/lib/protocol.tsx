@@ -35,7 +35,7 @@ export type Actions = {
   claimRebate: () => Promise<void>;
   registerProvider: (uri: string, stake: bigint) => Promise<void>;
   mint: (seriesId: number, cu: bigint, price: bigint, margin: bigint) => Promise<void>;
-  buy: (seriesId: number, cu: bigint, maxPrice: bigint, wifMode: boolean) => Promise<void>;
+  buy: (seriesId: number, cu: bigint, maxPrice: bigint, wifMode: boolean, maxWifBurn: bigint) => Promise<void>;
   sell: (seriesId: number, cu: bigint, price: bigint) => Promise<void>;
   cancel: (orderId: number) => Promise<void>;
   requestRedemption: (seriesId: number, cu: bigint, lotId: number) => Promise<void>;
@@ -257,10 +257,10 @@ export function ProtocolProvider({ children }: { children: ReactNode }) {
       isLive
         ? liveRun("Mint primary series", (w) => w.mint(seriesId, cu, price, margin))
         : simRun("Minted primary CU", (l, you) => l.mintPrimarySeries(you, seriesId, cu, price), (v) => `lot #${(v as { lotId: number }).lotId}`),
-    buy: (seriesId, cu, maxPrice, wifMode) =>
+    buy: (seriesId, cu, maxPrice, wifMode, maxWifBurn) =>
       isLive
-        ? liveRun("Buy CU", (w) => w.buy(seriesId, cu, maxPrice, wifMode))
-        : simRun(wifMode ? "Bought CU (10 bps $WIF mode)" : "Bought CU (30 bps)", (l, you) => l.buySeriesOrPlaceBid(you, seriesId, cu, maxPrice, wifMode), (v) => {
+        ? liveRun("Buy CU", (w) => w.buy(seriesId, cu, maxPrice, wifMode, maxWifBurn))
+        : simRun(wifMode ? "Bought CU (10 bps $WIF mode)" : "Bought CU (30 bps)", (l, you) => l.buySeriesOrPlaceBid(you, seriesId, cu, maxPrice, wifMode, maxWifBurn), (v) => {
             const r = v as { filledCu: bigint; orderId: number };
             return `${r.filledCu} CU filled${r.orderId ? `, rest bid #${r.orderId}` : ""}`;
           }),
