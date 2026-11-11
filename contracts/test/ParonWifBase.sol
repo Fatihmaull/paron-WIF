@@ -8,6 +8,7 @@ import {ParonSeriesToken} from "../src/ParonSeriesToken.sol";
 import {WifFlywheelVault} from "../src/WifFlywheelVault.sol";
 import {WifSlaJury} from "../src/WifSlaJury.sol";
 import {ParonExchangeDesk} from "../src/ParonExchangeDesk.sol";
+import {ComputeReferenceIndex} from "../src/ComputeReferenceIndex.sol";
 import {GpuTier} from "../src/libraries/ParonWifTypes.sol";
 
 /// @notice Shared deployment fixture. Parameters match `packages/core/src/constants.ts` (TOUR_PARAMS).
@@ -21,6 +22,9 @@ abstract contract ParonWifBase is Test {
     uint64 internal constant DELIVERY = 24 hours;
     uint64 internal constant CHALLENGE = 6 hours;
     uint64 internal constant MAX_INDEX_AGE = 30 days;
+    uint16 internal constant CRI_MAX_STEP_BPS = 1_000; // +-10% per publication
+    uint64 internal constant CRI_MIN_INTERVAL = 1 hours;
+    uint64 internal constant CRI_WINDOW = 6 hours;
     uint256 internal constant MAX = type(uint256).max;
 
     WifTokenMock internal wif;
@@ -28,6 +32,7 @@ abstract contract ParonWifBase is Test {
     ParonSeriesToken internal seriesToken;
     WifFlywheelVault internal vault;
     ParonExchangeDesk internal desk;
+    ComputeReferenceIndex internal criOracle;
     WifSlaJury internal jury;
 
     address internal deployer = makeAddr("deployer");
@@ -45,12 +50,15 @@ abstract contract ParonWifBase is Test {
         usdg = new UsdgMock(deployer, 0);
         seriesToken = new ParonSeriesToken(deployer, "ipfs://paron-wif/series/{id}.json");
         vault = new WifFlywheelVault(deployer, address(wif), address(usdg), true, treasury, WIF_PRICE);
+        address[] memory attestors = new address[](1);
+        attestors[0] = attestor;
+        criOracle = new ComputeReferenceIndex(deployer, attestors, 1, CRI_MAX_STEP_BPS, CRI_MIN_INTERVAL, CRI_WINDOW);
         desk = new ParonExchangeDesk(
             address(seriesToken),
             address(vault),
             address(usdg),
             address(wif),
-            attestor,
+            address(criOracle),
             ACK,
             DELIVERY,
             CHALLENGE,
@@ -82,7 +90,7 @@ abstract contract ParonWifBase is Test {
         vm.stopPrank();
 
         vm.prank(attestor);
-        desk.attestReferenceIndex(CRI_GENESIS, keccak256("CRI-H100 genesis basket"));
+        criOracle.submit(CRI_GENESIS, keccak256("CRI-H100 genesis basket"));
     }
 
     // ------------------------------------------------------------------
@@ -124,7 +132,7 @@ abstract contract ParonWifBase is Test {
         returns (uint256 filled, uint256 orderId)
     {
         vm.prank(who);
-        (filled, orderId) = desk.buySeriesOrPlaceBid(seriesId, cu, maxPrice, wifMode);
+        (filled, orderId) = desk.buySeriesOrPlaceBid(seriesId, cu, maxPrice, wifMode, MAX);
     }
 
     function _sign(uint256 pk, bytes32 digest) internal pure returns (bytes memory) {

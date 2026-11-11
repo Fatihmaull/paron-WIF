@@ -45,7 +45,7 @@ contract ParonWifTourTest is ParonWifBase {
 
     function test_SixtySecondJudgeTourMatchesGoldenParity() public {
         // ---- Step 1: Prime provider stakes 100,000 $WIF -> Tier 2 -> 25% margin, mints 200 CU ----
-        vm.warp(block.timestamp + 10);
+        vm.warp(vm.getBlockTimestamp() + 10);
         prime = _provider("batam-prime-h200", 100_000e18);
         address tee;
         (tee, primeTeeKey) = makeAddrAndKey("batam-prime-tee");
@@ -57,7 +57,7 @@ contract ParonWifTourTest is ParonWifBase {
         assertEq(usdgBefore - usdg.balanceOf(prime), _g("expect.providerMarginUsdg"));
 
         // ---- Step 2: autonomous agent stakes, buys 50 CU in $WIF discount mode (10 bps, burns its WIF) ----
-        vm.warp(block.timestamp + 10);
+        vm.warp(vm.getBlockTimestamp() + 10);
         vm.prank(agent);
         vault.stakeWifForMarginBoost(20_000e18);
         uint256 burned0 = vault.totalWifBurnedByParon();
@@ -68,7 +68,7 @@ contract ParonWifTourTest is ParonWifBase {
         assertEq(vault.totalWifBurnedByParon() - burned0, _g("expect.agentFeeWifBurned"));
 
         // ---- Step 3: secondary CLOB fill. MM undercuts at $2.23, the A100 lab lifts 18 CU (40 A100 h) ----
-        vm.warp(block.timestamp + 10);
+        vm.warp(vm.getBlockTimestamp() + 10);
         vm.prank(marketMaker);
         desk.placeAsk(seriesBtm, 20, 2_230_000);
         uint256 labCu = seriesToken.convertGpuHoursToCu(GpuTier.A100, 40e18) / 1e18;
@@ -80,7 +80,7 @@ contract ParonWifTourTest is ParonWifBase {
         assertEq(vault.totalWifBurnedByParon() - burned0, _g("expect.labFeeWifBurned"));
 
         // ---- Step 4: happy-path delivery of the first 25 CU with a signed execution receipt ----
-        vm.warp(block.timestamp + 10);
+        vm.warp(vm.getBlockTimestamp() + 10);
         uint256 r1 = _redeemAndDeliver(lotId, 142, 9_997, "job-log: 25 CU, p95 142ms");
         vm.prank(agent);
         desk.confirmDelivery(r1);
@@ -89,7 +89,7 @@ contract ParonWifTourTest is ParonWifBase {
         assertEq(vault.claimProviderRebate(), _g("expect.providerRebateClaimed"));
 
         // ---- Step 5: SLA breach -> dispute -> $WIF burn-to-vote jury -> slash -> voter upside ----
-        vm.warp(block.timestamp + 10);
+        vm.warp(vm.getBlockTimestamp() + 10);
         uint256 r2 = _redeemAndDeliver(lotId, 612, 9_780, "job-log: 25 CU, p95 612ms, 97.8% uptime");
         vm.prank(agent);
         uint256 did = jury.openSlaDispute(r2, keccak256("agent-probe-log.json"), "p95 612ms > 250ms SLA");
@@ -101,7 +101,7 @@ contract ParonWifTourTest is ParonWifBase {
         jury.voteOnDisputeWithWifBurn(did, true, 1_000e18);
         vm.prank(prime);
         jury.voteOnDisputeWithWifBurn(did, false, 1_000e18);
-        vm.warp(block.timestamp + VOTING);
+        vm.warp(vm.getBlockTimestamp() + VOTING);
 
         uint256 agentUsdg = usdg.balanceOf(agent);
         burned0 = vault.totalWifBurnedByParon();

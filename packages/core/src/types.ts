@@ -123,7 +123,7 @@ export type ParonEvent = {
   block: number;
   timestamp: bigint;
   txHash: Hex;
-  contract: "WifToken" | "Usdg" | "ParonSeriesToken" | "WifFlywheelVault" | "WifSlaJury" | "ParonExchangeDesk";
+  contract: "WifToken" | "Usdg" | "ParonSeriesToken" | "WifFlywheelVault" | "WifSlaJury" | "ParonExchangeDesk" | "ComputeReferenceIndex";
   name: string;
   args: EventArgs;
 };

@@ -12,8 +12,8 @@ Paron WIF turns one hour of GPU compute into a liquid, permissionless asset: **1
 
 | | |
 | --- | --- |
-| Contracts | 6 Solidity contracts + 2 linked libraries, Foundry, OpenZeppelin 5.6.1, solc 0.8.30, zero compiler warnings |
-| Tests | 43 Foundry tests (incl. fuzzing, order-book attack scenarios and an on-chain judge-tour parity test), 18 engine tests, 4 indexer tests, an anvil end-to-end run |
+| Contracts | 7 Solidity contracts + 3 linked libraries, Foundry, OpenZeppelin 5.6.1, solc 0.8.30, zero compiler warnings |
+| Tests | 58 Foundry tests (incl. fuzzing, order-book attack scenarios, oracle and slippage tests, and an on-chain judge-tour parity test), 22 engine tests, 4 indexer tests, an anvil end-to-end run |
 | Parity | The zero-wallet simulation reproduces the on-chain judge tour **to the last unit** (shared golden fixture) |
 | One command | `npm run verify:all` → exits 0 in about a minute |
 
@@ -107,6 +107,7 @@ paron-WIF/
 │   ├── src/ParonSeriesToken.sol    ERC-1155 canonical CU series + hardware weight conversion
 │   ├── src/WifFlywheelVault.sol    The Paron Vault: margin tiers, fee routing, buyback & burn, juror pools
 │   ├── src/WifSlaJury.sol          burn-to-vote SLA jury + corridor elections
+│   ├── src/ComputeReferenceIndex.sol  CRI-H100 oracle: attestor quorum, median, step and rate limits
 │   ├── src/ParonExchangeDesk.sol   primary issuance, CLOB, Mode A cash settlement, Mode B redemption
 │   ├── src/libraries/              ParonClobLib, ParonSettlementLib (linked), constants, types
 │   ├── script/DeployParonWif.s.sol deterministic deploy + seeded market, writes deployments/<chainId>.json
@@ -124,11 +125,12 @@ paron-WIF/
 
 | Contract | Role | Runtime size |
 | --- | --- | --- |
-| `ParonExchangeDesk` | Permissionless providers, primary mint with `$WIF`-tier margin, price-time CLOB with a `$WIF` priority lane, Mode A `settleCashAtIndex`, Mode B `requestRedemption` → `acknowledgeRedemption` → `deliverWithReceipt` → `confirmDelivery` / dispute | 24,537 B |
+| `ParonExchangeDesk` | Permissionless providers, primary mint with `$WIF`-tier margin, price-time CLOB with a `$WIF` priority lane, Mode A `settleCashAtIndex`, Mode B `requestRedemption` → `acknowledgeRedemption` → `deliverWithReceipt` → `confirmDelivery` / dispute | 24,079 B |
 | `ParonSeriesToken` | ERC-1155 CU ledger; `createSeries(corridor, gpu, yymm)` derives symbol and delivery window on-chain; `convertGpuHoursToCu` | 10,215 B |
 | `WifSlaJury` | Disputes, burn votes, outcome execution, voter upside claims, corridor elections | 9,513 B |
-| `WifFlywheelVault` | Staking tiers, stake locks, fee legs, buyback & burn, rebate accumulator, juror pools | 8,183 B |
-| `ParonClobLib` / `ParonSettlementLib` | Linked libraries: order-book storage ops, flooding protection and eviction; slash waterfall, finalize, stake-lock sync, receipt signature recovery | 3,955 B / 2,646 B |
+| `WifFlywheelVault` | Staking tiers, stake locks, fee legs, buyback & burn, rebate accumulator, juror pools, bounded `$WIF` price updates | 8,365 B |
+| `ComputeReferenceIndex` | CRI-H100 oracle for Mode A: quorum of attestors, median, ±10% step clamp, one publication per hour; the owner manages the attestor set but cannot write a price | 3,632 B |
+| `ParonClobLib` / `ParonSettlementLib` / `ParonLotLib` | Linked libraries: order-book storage, flooding protection and eviction; slash waterfall, finalize and receipt signature recovery; lot accounting and stake-lock sync | 3,955 B / 2,349 B / 1,798 B |
 | `WifTokenMock` / `UsdgMock` | Testnet tokens with faucets; point the protocol at canonical tokens with `WIF_TOKEN_ADDRESS` / `USDG_TOKEN_ADDRESS` | 2,868 B / 2,443 B |
 
 Design notes:
@@ -138,8 +140,11 @@ Design notes:
 - **Burn modes.** With a token exposing `burn`/`burnFrom` (`WIF_NATIVE_BURN=true`) burns shrink total supply; otherwise burns go to `0x000000000000000000000000000000000000dEaD`.
 - **Bounded loops.** The book keeps at most 24 price levels per side, a transaction fills at most 32 orders, lot assignment scans at most 64 lots.
 - **Order-book flooding protection.** Resting orders and primary mints must be worth at least $5; one address holds at most 8 resting orders per series and side; and when a side is full, an order at a strictly better price evicts the worst level (makers are refunded, collateralised primary asks are never evicted). Filling the book therefore costs real capital across several wallets and still cannot block a better price.
-- **Trust assumptions, stated plainly.** Two oracle roles exist: the `$WIF` reference price (used to size fee burns and buyback payouts) and the CRI-H100 attestor (used for Mode A). On testnet both are the deployer; the attestor can rotate itself to a multisig or oracle network. The desk has no owner once the jury is wired. The remaining owner powers are narrow: one-time module wiring, registering new physical corridors on the series token, and setting the vault's treasury and oracle addresses; none of them can move user funds.
-
+- **Oracles, and how far each can go wrong.**
+  - *CRI-H100* (Mode A cash settlement) comes from `ComputeReferenceIndex`, not from one address: a quorum of distinct attestors must have fresh submissions, the published value is their **median**, each publication moves the index at most **±10%**, and at most once per hour. A faulty minority cannot move the median; a fully captured quorum can only walk the price one step per hour, which a monitor can catch. The owner (a Safe in production) manages the attestor set and quorum and cannot write a price. The testnet deployment uses a single attestor (the deployer) for convenience; set `INDEX_ATTESTORS` and `CRI_QUORUM` for a real set.
+  - *`$WIF` reference price* (sizes fee burns and buyback payouts) is bounded to **±10% per update and one update per hour**, and every discount-mode buy carries `maxWifBurn`: the transaction reverts instead of taking more `$WIF` than the caller agreed to. It is still a single price source on testnet; a TWAP or oracle-network adapter is the next step.
+  - The desk has no owner once the jury is wired. The remaining owner powers are narrow: one-time module wiring, registering new physical corridors, and the vault's treasury and oracle addresses. None of them can move user funds.
+  - Delivery quality is still attested by the provider's own key (plus the jury). Independent probes (watchers that stake `$WIF`) and TEE attestation are on the roadmap; the UI labels receipts as provider-attested.
 ---
 
 ## The coded judge tour, on-chain and off-chain
@@ -165,11 +170,11 @@ The receipts the tour downloads chain each step's calls, events and flywheel del
 
 1. Toolchain check (Node ≥ 22.18, Foundry), dependency install if needed
 2. **Brand & secret audit**: sponsor brand in files, file names and history; private keys, keyed RPC URLs, tokens, PEM keys; tracked env files; empty key slots in `.env.example`
-3. **Solidity build** with zero compiler and lint warnings, every contract under EIP-170
-4. **`forge test -vvv`**: 43 tests
+3. **Solidity build** with zero solc warnings (forge-lint advisories are counted but not gating, since they vary by Foundry release), every contract under EIP-170
+4. **`forge test -vvv`**: 58 tests
 5. **ABI drift**: the typed ABIs in `packages/core` match the compiled contracts
 6. **Typecheck**: core, indexer, web
-7. **Engine tests** (18): golden parity, receipt hash chain, atomic rollback, USDG conservation and `$WIF` supply invariants, CLOB priority, signature checks, genesis world, agent decisions and an agent end-to-end run
+7. **Engine tests** (22): golden parity, receipt hash chain, atomic rollback, USDG conservation and `$WIF` supply invariants, CLOB priority, signature checks, genesis world, agent decisions and an agent end-to-end run
 8. **Indexer tests** (4): events alone rebuild the exact ledger state (flywheel totals, open interest, every book level), RPC retry and adaptive `getLogs` range splitting, the REST API, fresh chain-head reads
 9. **`next build`** of the web app
 10. **Anvil end-to-end** (`scripts/e2e-local.sh`): deploy and seed with the real script, index the chain and cross-check it against contract views, then run the autonomous agent with a live key and verify its `$WIF` fee burn on-chain
@@ -196,7 +201,7 @@ The protocol is deployment-ready; no public testnet deployment was made from thi
 cd contracts && PARON_DEPLOYER_PK=<key> forge script script/DeployParonWif.s.sol --rpc-url <target-chain-rpc> --broadcast
 ```
 
-Optional variables (see `.env.example`): `WIF_TOKEN_ADDRESS` and `WIF_NATIVE_BURN` to use the canonical `$WIF`, `USDG_TOKEN_ADDRESS`, `TREASURY_ADDRESS`, `INDEX_ATTESTOR`, `WIF_PRICE_USDG`, `CRI_H100_USDG`, `SEED_MARKET`. The script writes `deployments/<chainId>.json`; the web build picks addresses up from it, and with a wallet connected on chain `NEXT_PUBLIC_CHAIN_ID` (target chain 46630, label "Flat World EVM / Target Chain") the app switches to **Live** mode and sends real transactions with automatic approvals.
+Optional variables (see `.env.example`): `WIF_TOKEN_ADDRESS` and `WIF_NATIVE_BURN` to use the canonical `$WIF`, `USDG_TOKEN_ADDRESS`, `TREASURY_ADDRESS`, `INDEX_ATTESTORS` (comma-separated), `CRI_QUORUM`, `WIF_PRICE_USDG`, `CRI_H100_USDG`, `SEED_MARKET`. The script writes `deployments/<chainId>.json`; the web build picks addresses up from it, and with a wallet connected on chain `NEXT_PUBLIC_CHAIN_ID` (target chain 46630, label "Flat World EVM / Target Chain") the app switches to **Live** mode and sends real transactions with exact (not unlimited) approvals; the live path is exercised end to end against anvil with an injected wallet.
 
 ---
 
@@ -225,8 +230,8 @@ Optional variables (see `.env.example`): `WIF_TOKEN_ADDRESS` and `WIF_NATIVE_BUR
 | `ParonSeriesToken.convertGpuHoursToCu` with A100 4500 … GB200 35000 | Done |
 | `WifFlywheelVault`: stake/unstake, 5000/3500/2500 margin tiers, `hasWifFeeDiscount`, `processProtocolFeeAndBurn` with 50/30/20 legs and `WifFlywheelBurned` events | Done (signature adds the payer for telemetry) |
 | `WifSlaJury`: `openSlaDispute`, `voteOnDisputeWithWifBurn`, `resolveDispute`, `claimVoterUpside`, `voteForComputeCorridor` | Done |
-| `ParonExchangeDesk`: `registerProviderAndStakeWif`, `mintPrimarySeries`, `buySeriesOrPlaceBid`, Mode A and Mode B | Done |
-| 18+ Foundry tests | 43 |
+| `ParonExchangeDesk`: `registerProviderAndStakeWif`, `mintPrimarySeries`, `buySeriesOrPlaceBid` (with `maxWifBurn`), Mode A and Mode B | Done |
+| 18+ Foundry tests | 58 |
 | Clean indexer without KYB, flywheel metrics, disputes, corridor leaderboards | Done (`indexer/`) |
 | `cfoComputeAgent.ts` | Done (`packages/core/src/cfoComputeAgent.ts`) |
 | `WifBurnBanner`, series matrix + converter, order book with margin slider and fee preview, `/flywheel` 3 panels, `/agents`, 6-step `/tour` with JSON receipts, EIP-6963 | Done |

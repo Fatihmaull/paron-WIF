@@ -4,7 +4,6 @@ pragma solidity 0.8.30;
 import {ParonWifBase} from "./ParonWifBase.sol";
 import {ParonExchangeDesk} from "../src/ParonExchangeDesk.sol";
 import {ParonClobLib} from "../src/libraries/ParonClobLib.sol";
-import {Order} from "../src/libraries/ParonWifTypes.sol";
 
 /// @notice Order-book griefing resistance: minimum notional, per-maker order cap, worst-level eviction.
 contract ParonWifClobTest is ParonWifBase {
@@ -29,7 +28,7 @@ contract ParonWifClobTest is ParonWifBase {
         address buyer = _actor("dust-buyer", 0, 100e6);
         vm.prank(buyer);
         vm.expectRevert(abi.encodeWithSelector(ParonExchangeDesk.OrderTooSmall.selector, 2_000_000, MIN));
-        desk.buySeriesOrPlaceBid(seriesJkt, 2, 1_000_000, false);
+        desk.buySeriesOrPlaceBid(seriesJkt, 2, 1_000_000, false, 0);
     }
 
     function test_DustRemainderOfABidNeverRests() public {
@@ -123,10 +122,10 @@ contract ParonWifClobTest is ParonWifBase {
         address late = _actor("late-bidder", 0, 1_000e6);
         vm.prank(late);
         vm.expectRevert(ParonClobLib.TooManyLevels.selector);
-        desk.buySeriesOrPlaceBid(seriesJkt, 10, 900_000, false);
+        desk.buySeriesOrPlaceBid(seriesJkt, 10, 900_000, false, 0);
         vm.prank(late);
         vm.expectRevert(ParonClobLib.TooManyLevels.selector);
-        desk.buySeriesOrPlaceBid(seriesJkt, 10, 990_000, false); // one tick below the worst level
+        desk.buySeriesOrPlaceBid(seriesJkt, 10, 990_000, false, 0); // one tick below the worst level
     }
 
     function test_JoiningAnExistingLevelWorksWhileFull() public {

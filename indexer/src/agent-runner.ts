@@ -9,7 +9,6 @@ import {
   createPublicClient,
   createWalletClient,
   http,
-  maxUint256,
   type Abi,
   type Address as ViemAddress,
   type PublicClient,
@@ -49,7 +48,8 @@ export class ChainAgentBackend implements AgentBackend {
   private readonly pub: PublicClient;
   private readonly wallet: WalletClient;
   private readonly c: Contracts;
-  private approved = false;
+  private budgetUsdg = 10_000n * 1_000_000n;
+  private budgetWif = 500_000n * 10n ** 18n;
 
   constructor(pub: PublicClient, wallet: WalletClient, contracts: Contracts) {
     this.pub = pub;
@@ -73,8 +73,13 @@ export class ChainAgentBackend implements AgentBackend {
     }
   }
 
-  async ensureApprovals(): Promise<void> {
-    if (this.approved) return;
+  /**
+   * Approves bounded budgets, not unlimited allowances: a compromised desk or oracle can then lose at most
+   * AGENT_APPROVAL_USDG / AGENT_APPROVAL_WIF. Allowances are topped up when they fall below half the budget.
+   */
+  async ensureApprovals(budgetUsdg = this.budgetUsdg, budgetWif = this.budgetWif): Promise<void> {
+    this.budgetUsdg = budgetUsdg;
+    this.budgetWif = budgetWif;
     const pairs: [ViemAddress, Abi, ViemAddress][] = [
       [this.c.Usdg, usdgAbi as Abi, this.c.ParonExchangeDesk],
       [this.c.WifToken, wifTokenAbi as Abi, this.c.ParonExchangeDesk],
@@ -83,12 +88,13 @@ export class ChainAgentBackend implements AgentBackend {
     ];
     for (const [token, abi, spender] of pairs) {
       const allowance = await this.read<bigint>(token, abi, "allowance", [this.address, spender]);
-      if (allowance < maxUint256 / 2n) await this.write(token, abi, "approve", [spender, maxUint256]);
+      const budget = token === this.c.Usdg ? budgetUsdg : budgetWif;
+      if (allowance < budget / 2n) await this.write(token, abi, "approve", [spender, budget]);
     }
-    this.approved = true;
   }
 
   async observe(): Promise<AgentObservation> {
+    await this.ensureApprovals(); // top up bounded allowances every tick
     const c = this.c;
     const me = this.address as ViemAddress;
     const [wif, usdg, stakedWif, wifDiscount, cri, criAt, seriesCount, redemptionCount, disputeCount, block] = await Promise.all([
@@ -170,10 +176,12 @@ export class ChainAgentBackend implements AgentBackend {
     return this.write(this.c.WifFlywheelVault, wifFlywheelVaultAbi as Abi, "stakeWifForMarginBoost", [amount]);
   }
 
-  async buy(seriesId: number, cu: bigint, maxPrice: bigint, useWifDiscount: boolean) {
+  async buy(seriesId: number, cu: bigint, maxPrice: bigint, useWifDiscount: boolean, maxWifSlippageBps: bigint) {
+    const quote = await this.read<[bigint, bigint, bigint, bigint]>(this.c.ParonExchangeDesk, paronExchangeDeskAbi as Abi, "quoteBuy", [BigInt(seriesId), cu, maxPrice, useWifDiscount]);
+    const maxWifBurn = quote[3] + (quote[3] * maxWifSlippageBps) / 10_000n;
     const before = await this.read<bigint>(this.c.ParonSeriesToken, paronSeriesTokenAbi as Abi, "balanceOf", [this.address, BigInt(seriesId)]);
     const usdgBefore = await this.read<bigint>(this.c.Usdg, usdgAbi as Abi, "balanceOf", [this.address]);
-    const r = await this.write(this.c.ParonExchangeDesk, paronExchangeDeskAbi as Abi, "buySeriesOrPlaceBid", [BigInt(seriesId), cu, maxPrice, useWifDiscount]);
+    const r = await this.write(this.c.ParonExchangeDesk, paronExchangeDeskAbi as Abi, "buySeriesOrPlaceBid", [BigInt(seriesId), cu, maxPrice, useWifDiscount, maxWifBurn]);
     if (!r.ok) return r;
     const after = await this.read<bigint>(this.c.ParonSeriesToken, paronSeriesTokenAbi as Abi, "balanceOf", [this.address, BigInt(seriesId)]);
     const usdgAfter = await this.read<bigint>(this.c.Usdg, usdgAbi as Abi, "balanceOf", [this.address]);
@@ -231,7 +239,10 @@ async function main(): Promise<void> {
     const pub = createPublicClient({ chain, transport: http(cfg.rpcUrl) }) as PublicClient;
     const wallet = createWalletClient({ chain, transport: http(cfg.rpcUrl), account });
     const live = new ChainAgentBackend(pub, wallet, cfg.manifest.contracts);
-    await live.ensureApprovals();
+    await live.ensureApprovals(
+      BigInt(process.env.AGENT_APPROVAL_USDG || 10_000n * 1_000_000n),
+      BigInt(process.env.AGENT_APPROVAL_WIF || 500_000n * 10n ** 18n),
+    );
     backend = live;
     console.log(`[agent] live mode as ${account.address} on chain ${cfg.chainId}`);
   } else {

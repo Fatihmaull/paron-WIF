@@ -55,6 +55,10 @@ library ParonWifConstants {
     // ---------------------------------------------------------------------
     uint256 internal constant PRICE_TICK = 10_000; // 0.01 USDG (6 decimals)
     uint256 internal constant WIF_UNIT = 1e18;
+    /// @dev The $WIF reference price may move at most +-10% per update and once per hour, so a compromised
+    ///      or mistaken price source cannot make fee burns or buyback payouts absurd in a single transaction.
+    uint256 internal constant WIF_PRICE_MAX_MOVE_BPS = 1_000;
+    uint256 internal constant WIF_PRICE_MIN_INTERVAL = 1 hours;
     uint256 internal constant MAX_LEVELS = 24;
     /// @dev Minimum notional (USDG, 6 decimals) of a resting order or primary mint: $5. Makes filling the
     ///      book with dust levels cost real capital.

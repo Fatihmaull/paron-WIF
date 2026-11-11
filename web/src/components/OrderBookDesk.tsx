@@ -20,6 +20,8 @@ import { useProtocol } from "@/lib/protocol";
 import { marginFor, quoteBuy } from "@/lib/quote";
 import { KV, NumField, Panel, Pill, Toggle, fmtInt, parseDecimal } from "./ui";
 
+const SLIPPAGE_BPS = 2_000n; // 20% tolerance over the quoted $WIF burn (maxWifBurn)
+
 const TIERS = [
   { tier: 0, name: "Tier 0", stake: 0n, bps: MARGIN_TIER0_BPS, eff: "2.0x" },
   { tier: 1, name: "Tier 1", stake: TIER1_STAKE, bps: MARGIN_TIER1_BPS, eff: "2.85x" },
@@ -92,6 +94,8 @@ export function TradeTicket({ series, preset }: { series: SeriesView; preset: { 
   const useWif = wifMode && eligible;
   const q = useMemo(() => quoteBuy(series.asks, cu, px, useWif, snapshot.flywheel.wifPriceUsdg), [series.asks, cu, px, useWif, snapshot.flywheel.wifPriceUsdg]);
   const held = acct?.cu[series.id] ?? 0n;
+  // Slippage cap on the $WIF burn: the oracle price may move up to 10% per update, which raises the burn by 11.1%.
+  const maxWifBurn = useWif ? (q.wifBurned * (10_000n + SLIPPAGE_BPS)) / 10_000n : 0n;
   const proceeds = (() => {
     let remaining = cu;
     let out = 0n;
@@ -133,6 +137,7 @@ export function TradeTicket({ series, preset }: { series: SeriesView; preset: { 
               [`Protocol fee (${useWif ? "10" : "30"} bps)`, formatUsdg(q.feeUsdg, 4)],
               ["You save vs 30 bps", useWif ? <span className="ok">{formatUsdg(q.standardFeeUsdg - q.feeUsdg, 4)}</span> : "—"],
               [useWif ? "🔥 $WIF burned from your wallet" : "🔥 $WIF bought back & burned", <span className="burn">{formatWifAmount(q.wifBurned, 2)} $WIF</span>],
+              ...(useWif ? ([["Max $WIF burn (20% slippage cap)", `${formatWifAmount(maxWifBurn, 2)} $WIF`]] as [string, string][]) : []),
               ["Fee split: burn / jury / stakers", `${formatUsdg(q.burnLegUsdg, 4)} / ${formatUsdg(q.juryLegUsdg, 4)} / ${formatUsdg(q.providerLegUsdg, 4)}`],
               ...(q.restingCu > 0n ? ([["Rests as bid", `${fmtInt(Number(q.restingCu))} CU · escrow ${formatUsdg(q.restingEscrow)}`]] as [string, string][]) : []),
               ["Total cost", formatUsdg(q.notional + q.feeUsdg + (q.restingCu > 0n ? q.restingEscrow : 0n)), "total"],
@@ -143,7 +148,7 @@ export function TradeTicket({ series, preset }: { series: SeriesView; preset: { 
             style={{ marginTop: 12 }}
             type="button"
             disabled={busy || !!overlay || cu === 0n || !ticked}
-            onClick={() => void actions.buy(series.id, cu, px, useWif)}
+            onClick={() => void actions.buy(series.id, cu, px, useWif, maxWifBurn)}
           >
             Buy {fmtInt(Number(cu))} CU {q.restingCu > 0n ? "· rest as bid" : ""}
           </button>

@@ -8,7 +8,6 @@ import {
   custom,
   defineChain,
   http,
-  maxUint256,
   type Abi,
   type PublicClient,
   type WalletClient,
@@ -459,7 +458,8 @@ export class LiveWriter {
   async allow(token: Address, spender: Address, amount: bigint): Promise<void> {
     const abi = token === this.a.usdg ? U : W;
     const current = (await this.pub.readContract({ address: token, abi, functionName: "allowance", args: [this.account, spender] })) as bigint;
-    if (current < amount) await this.send(token, abi, "approve", [spender, maxUint256]);
+    // Exact approvals: the desk, vault and jury can never pull more than this transaction needs.
+    if (current < amount) await this.send(token, abi, "approve", [spender, amount]);
   }
 
   faucet = async () => {
@@ -477,10 +477,12 @@ export class LiveWriter {
     await this.allow(this.a.usdg, this.a.desk, margin);
     return this.send(this.a.desk, D, "mintPrimarySeries", [BigInt(seriesId), cu, price]);
   };
-  buy = async (seriesId: number, cu: bigint, maxPrice: bigint, wifMode: boolean) => {
-    await this.allow(this.a.usdg, this.a.desk, cu * maxPrice * 2n);
-    if (wifMode) await this.allow(this.a.wif, this.a.desk, 10n ** 27n);
-    return this.send(this.a.desk, D, "buySeriesOrPlaceBid", [BigInt(seriesId), cu, maxPrice, wifMode]);
+  /** @param maxWifBurn slippage cap on the $WIF taken in discount mode; it is also the exact $WIF allowance. */
+  buy = async (seriesId: number, cu: bigint, maxPrice: bigint, wifMode: boolean, maxWifBurn: bigint) => {
+    // Notional plus the 30 bps fee reserve covers fills, fees and any resting-bid escrow.
+    await this.allow(this.a.usdg, this.a.desk, (cu * maxPrice * 10_030n) / 10_000n);
+    if (wifMode && maxWifBurn > 0n) await this.allow(this.a.wif, this.a.desk, maxWifBurn);
+    return this.send(this.a.desk, D, "buySeriesOrPlaceBid", [BigInt(seriesId), cu, maxPrice, wifMode, wifMode ? maxWifBurn : 0n]);
   };
   sell = (seriesId: number, cu: bigint, price: bigint) => this.send(this.a.desk, D, "placeAsk", [BigInt(seriesId), cu, price]);
   cancel = (orderId: number) => this.send(this.a.desk, D, "cancelOrder", [BigInt(orderId)]);
@@ -492,7 +494,7 @@ export class LiveWriter {
   claimMissed = (rid: number) => this.send(this.a.desk, D, "claimMissedDeadline", [BigInt(rid)]);
   settleCash = (seriesId: number, cu: bigint) => this.send(this.a.desk, D, "settleCashAtIndex", [BigInt(seriesId), cu]);
   withdraw = () => this.send(this.a.desk, D, "withdrawProviderBalance");
-  openDispute = async (rid: number, evidence: Hex, reason: string) => (await this.allow(this.a.wif, this.a.jury, 10n ** 27n), this.send(this.a.jury, J, "openSlaDispute", [BigInt(rid), evidence, reason]));
+  openDispute = async (rid: number, evidence: Hex, reason: string) => (await this.allow(this.a.wif, this.a.jury, 100n * 10n ** 18n), this.send(this.a.jury, J, "openSlaDispute", [BigInt(rid), evidence, reason]));
   vote = async (did: number, slash: boolean, amount: bigint) => (await this.allow(this.a.wif, this.a.jury, amount), this.send(this.a.jury, J, "voteOnDisputeWithWifBurn", [BigInt(did), slash, amount]));
   resolve = (did: number) => this.send(this.a.jury, J, "resolveDispute", [BigInt(did)]);
   claimUpside = (did: number) => this.send(this.a.jury, J, "claimVoterUpside", [BigInt(did)]);

@@ -20,6 +20,7 @@ export type Manifest = {
     WifFlywheelVault: `0x${string}`;
     WifSlaJury: `0x${string}`;
     ParonExchangeDesk: `0x${string}`;
+    ComputeReferenceIndex: `0x${string}`;
   };
 };
 

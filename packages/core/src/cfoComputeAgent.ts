@@ -136,6 +136,8 @@ export type AgentPolicy = {
   hedgeTakeProfitBps: bigint;
   utilizationRedeemTrigger: number;
   minUsdgReserve: bigint;
+  /** Slippage tolerance on the $WIF burn of a discount-mode buy, in bps over the quoted burn (maxWifBurn). */
+  maxWifSlippageBps: bigint;
 };
 
 export const DEFAULT_AGENT_POLICY: AgentPolicy = {
@@ -149,6 +151,7 @@ export const DEFAULT_AGENT_POLICY: AgentPolicy = {
   hedgeTakeProfitBps: 800n,
   utilizationRedeemTrigger: 0.82,
   minUsdgReserve: 200n * 1_000_000n,
+  maxWifSlippageBps: 2_000n,
 };
 
 export type AgentAction =
@@ -296,7 +299,7 @@ export interface AgentBackend {
   readonly address: Address;
   observe(): Promise<AgentObservation>;
   stake(amount: bigint): Promise<TxResult>;
-  buy(seriesId: number, cu: bigint, maxPrice: bigint, useWifDiscount: boolean): Promise<TxResult & { filledCu?: bigint; notional?: bigint }>;
+  buy(seriesId: number, cu: bigint, maxPrice: bigint, useWifDiscount: boolean, maxWifSlippageBps: bigint): Promise<TxResult & { filledCu?: bigint; notional?: bigint }>;
   requestRedemption(seriesId: number, cu: bigint, deliveryRef: Hex): Promise<TxResult>;
   confirmDelivery(redemptionId: number): Promise<TxResult>;
   openDispute(redemptionId: number, evidenceHash: Hex, reason: string): Promise<TxResult>;
@@ -373,7 +376,7 @@ export class CfoComputeAgent {
       case "STAKE_WIF":
         return b.stake(action.amount);
       case "BUY_CU": {
-        const r = await b.buy(action.seriesId, action.cu, action.maxPrice, action.useWifDiscount);
+        const r = await b.buy(action.seriesId, action.cu, action.maxPrice, action.useWifDiscount, this.policy.maxWifSlippageBps);
         if (r.ok && r.filledCu && r.notional) {
           const e = this.memory.entries[action.seriesId] ?? { cu: 0n, cost: 0n };
           this.memory.entries[action.seriesId] = { cu: e.cu + r.filledCu, cost: e.cost + r.notional };
@@ -490,10 +493,12 @@ export class LedgerAgentBackend implements AgentBackend {
     return this.run((l) => l.stakeWifForMarginBoost(this.address, amount), () => `${amount / WIF} $WIF staked`);
   }
 
-  async buy(seriesId: number, cu: bigint, maxPrice: bigint, useWifDiscount: boolean) {
+  async buy(seriesId: number, cu: bigint, maxPrice: bigint, useWifDiscount: boolean, maxWifSlippageBps: bigint) {
+    const quoted = this.ledger().quoteBuy(seriesId, cu, maxPrice, useWifDiscount).wifBurn;
+    const maxWifBurn = quoted + (quoted * maxWifSlippageBps) / 10_000n;
     const fees = this.ledger().flywheelStats().totalWifBurned;
     const usdgBefore = this.ledger().usdgBalance(this.address);
-    const r = this.run((l) => l.buySeriesOrPlaceBid(this.address, seriesId, cu, maxPrice, useWifDiscount));
+    const r = this.run((l) => l.buySeriesOrPlaceBid(this.address, seriesId, cu, maxPrice, useWifDiscount, maxWifBurn));
     if (!r.ok) return r;
     const filledCu = r.value?.filledCu ?? 0n;
     const burned = this.ledger().flywheelStats().totalWifBurned - fees;
