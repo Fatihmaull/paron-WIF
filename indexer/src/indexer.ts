@@ -9,6 +9,7 @@ import {
   bigintReplacer,
   paronExchangeDeskAbi,
   paronSeriesTokenAbi,
+  computeReferenceIndexAbi,
   usdgAbi,
   wifFlywheelVaultAbi,
   wifSlaJuryAbi,
@@ -29,6 +30,7 @@ export function contractAbis(manifest: Manifest): Map<string, { name: string; ab
     [c.WifFlywheelVault.toLowerCase(), { name: "WifFlywheelVault", abi: wifFlywheelVaultAbi as Abi }],
     [c.WifSlaJury.toLowerCase(), { name: "WifSlaJury", abi: wifSlaJuryAbi as Abi }],
     [c.ParonExchangeDesk.toLowerCase(), { name: "ParonExchangeDesk", abi: paronExchangeDeskAbi as Abi }],
+    [c.ComputeReferenceIndex.toLowerCase(), { name: "ComputeReferenceIndex", abi: computeReferenceIndexAbi as Abi }],
   ]);
 }
 

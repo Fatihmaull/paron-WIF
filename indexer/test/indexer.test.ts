@@ -121,6 +121,7 @@ test("indexer always reads a fresh chain head (no cached block number)", async (
       WifFlywheelVault: "0x0000000000000000000000000000000000000004",
       WifSlaJury: "0x0000000000000000000000000000000000000005",
       ParonExchangeDesk: "0x0000000000000000000000000000000000000006",
+      ComputeReferenceIndex: "0x0000000000000000000000000000000000000007",
     },
   } as unknown as Manifest;
   const cfg = { ...loadConfig({}), dataDir: mkdtempSync(join(tmpdir(), "paron-wif-idx-")) };
