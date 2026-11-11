@@ -18,6 +18,8 @@ const EXPLANATIONS: Record<string, string> = {
   NotRegisteredProvider: "Register as a provider first (permissionless, no KYB).",
   NotWifDiscountEligible: "The 10 bps $WIF fee needs 10,000 $WIF held or staked.",
   SelfTrade: "This order would trade against your own resting order.",
+  OrderTooSmall: "Orders must be worth at least $5 (USDG).",
+  TooManyOrders: "You already hold the maximum of 8 resting orders on this side of the series.",
   TooManyLevels: "This side of the book is at its 24-level cap. Join an existing price.",
   InvalidPrice: "Prices must be positive multiples of $0.01.",
   ZeroAmount: "Enter an amount greater than zero.",

@@ -56,6 +56,14 @@ library ParonWifConstants {
     uint256 internal constant PRICE_TICK = 10_000; // 0.01 USDG (6 decimals)
     uint256 internal constant WIF_UNIT = 1e18;
     uint256 internal constant MAX_LEVELS = 24;
+    /// @dev Minimum notional (USDG, 6 decimals) of a resting order or primary mint: $5. Makes filling the
+    ///      book with dust levels cost real capital.
+    uint256 internal constant MIN_ORDER_NOTIONAL = 5_000_000;
+    /// @dev Active orders one address may hold per series and side. One wallet can no longer occupy
+    ///      more than a third of the 24 price levels.
+    uint256 internal constant MAX_ORDERS_PER_MAKER = 8;
+    /// @dev Orders one transaction may evict from the worst price level to make room for a better one.
+    uint256 internal constant MAX_EVICTIONS_PER_TX = 16;
     uint256 internal constant MAX_FILLS_PER_TX = 32;
     uint256 internal constant MAX_LOT_SCAN = 64;
     uint256 internal constant SETTLEMENT_GRACE = 7 days;
