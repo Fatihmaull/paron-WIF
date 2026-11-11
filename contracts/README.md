@@ -11,14 +11,18 @@ forge test -vvv
 | --- | --- |
 | `src/ParonExchangeDesk.sol` | Permissionless providers, `$WIF`-tier primary margin, price-time CLOB with a `$WIF` priority lane, Mode A cash settlement at CRI-H100, Mode B compute redemption with signed receipts |
 | `src/WifFlywheelVault.sol` | The Paron Vault: margin tiers and stake locks, 50/30/20 fee routing, buyback & burn, staker rebate stream, juror pools |
+| `src/ComputeReferenceIndex.sol` | CRI-H100 oracle: attestor quorum, median, ±10% step clamp, hourly publication |
 | `src/WifSlaJury.sol` | Burn-to-vote SLA disputes and weekly corridor elections |
 | `src/ParonSeriesToken.sol` | ERC-1155 canonical CU series and hardware weights |
 | `src/WifTokenMock.sol`, `src/UsdgMock.sol` | Testnet tokens with faucets |
 | `src/libraries/ParonClobLib.sol` | Linked library: order-book storage (sorted levels, two FIFO lanes per level), per-maker cap, worst-level eviction |
 | `src/libraries/ParonSettlementLib.sol` | Linked library: slash waterfall, delivery finalization, EIP-191 receipt recovery |
+| `src/libraries/ParonLotLib.sol` | Linked library: lot assignment, pro-rata escrow/margin release, stake-lock sync |
 | `script/DeployParonWif.s.sol` | Deterministic deployment and seeded market; writes `../deployments/<chainId>.json` |
 | `test/ParonWif.t.sol` | 31 unit and fuzz tests |
 | `test/ParonWifClob.t.sol` | 11 order-book tests: dust limits, per-maker cap, level-flooding attack, eviction |
+| `test/ComputeReferenceIndex.t.sol` | 10 oracle tests: quorum, median, collusion walk, rate limit, staleness, owner powers, fuzz |
+| `test/WifPriceBounds.t.sol` | 5 tests: `$WIF` price bounds and the `maxWifBurn` slippage cap |
 | `test/ParonWifTour.t.sol` | The judge tour on-chain, asserted against `../packages/core/fixtures/tour-golden.json` |
 
 Deploy (see the root README for every variable):
