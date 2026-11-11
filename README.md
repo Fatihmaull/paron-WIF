@@ -170,7 +170,7 @@ The receipts the tour downloads chain each step's calls, events and flywheel del
 
 1. Toolchain check (Node ≥ 22.18, Foundry), dependency install if needed
 2. **Brand & secret audit**: sponsor brand in files, file names and history; private keys, keyed RPC URLs, tokens, PEM keys; tracked env files; empty key slots in `.env.example`
-3. **Solidity build** with zero compiler and lint warnings, every contract under EIP-170
+3. **Solidity build** with zero solc warnings (forge-lint advisories are counted but not gating, since they vary by Foundry release), every contract under EIP-170
 4. **`forge test -vvv`**: 58 tests
 5. **ABI drift**: the typed ABIs in `packages/core` match the compiled contracts
 6. **Typecheck**: core, indexer, web

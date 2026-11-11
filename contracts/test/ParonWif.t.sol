@@ -240,7 +240,7 @@ contract ParonWifTest is ParonWifBase {
         address c = _provider("ask-205-second", 0);
         uint256 lotA = _mint(a, seriesJkt, 10, 2_100_000);
         uint256 lotB = _mint(b, seriesJkt, 10, 2_050_000);
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         uint256 lotC = _mint(c, seriesJkt, 10, 2_050_000);
         address buyer = _actor("clob-buyer", 0, 1_000e6);
 
@@ -268,7 +268,7 @@ contract ParonWifTest is ParonWifBase {
 
         vm.prank(plain);
         (, uint256 plainAsk) = desk.placeAsk(seriesJkt, 5, 2_500_000);
-        vm.warp(block.timestamp + 60);
+        vm.warp(vm.getBlockTimestamp() + 60);
         vm.prank(holder);
         (, uint256 holderAsk) = desk.placeAsk(seriesJkt, 5, 2_500_000);
         assertEq(desk.getOrder(plainAsk).lane, 1);
@@ -344,7 +344,7 @@ contract ParonWifTest is ParonWifBase {
         address agent = _actor("hedging-agent", 0, 1_000e6);
         _buy(agent, seriesJkt, 20, 2_000_000, false);
 
-        vm.warp(block.timestamp + CRI_MIN_INTERVAL);
+        vm.warp(vm.getBlockTimestamp() + CRI_MIN_INTERVAL);
         vm.prank(attestor);
         criOracle.submit(2_400_000, keccak256("CRI spike +9%")); // within the +-10% step
         assertEq(desk.criH100Usdg(), 2_400_000);
@@ -355,7 +355,7 @@ contract ParonWifTest is ParonWifBase {
         assertEq(desk.providerClaimableUsdg(p), 1_000_000, "provider keeps collateral above the index value");
         assertEq(seriesToken.balanceOf(agent, seriesJkt), 10);
 
-        vm.warp(block.timestamp + CRI_MIN_INTERVAL);
+        vm.warp(vm.getBlockTimestamp() + CRI_MIN_INTERVAL);
         vm.prank(attestor);
         criOracle.submit(3_000_000, keccak256("CRI spike +25%"));
         assertEq(desk.criH100Usdg(), 2_640_000, "a +25% report is clamped to one +10% step");
@@ -370,7 +370,7 @@ contract ParonWifTest is ParonWifBase {
         _mint(p, seriesJkt, 10, 2_000_000);
         address agent = _actor("stale-agent", 0, 100e6);
         _buy(agent, seriesJkt, 5, 2_000_000, false);
-        vm.warp(block.timestamp + MAX_INDEX_AGE + 1);
+        vm.warp(vm.getBlockTimestamp() + MAX_INDEX_AGE + 1);
         vm.prank(agent);
         vm.expectRevert(ParonExchangeDesk.StaleIndex.selector);
         desk.settleCashAtIndex(seriesJkt, 5);
@@ -425,7 +425,7 @@ contract ParonWifTest is ParonWifBase {
         uint256 rid = desk.requestRedemption(seriesBtm, 10, lotId, bytes32(0));
         vm.expectRevert(ParonExchangeDesk.DeadlineNotPassed.selector);
         desk.claimMissedDeadline(rid);
-        vm.warp(block.timestamp + ACK + 1);
+        vm.warp(vm.getBlockTimestamp() + ACK + 1);
         uint256 before = usdg.balanceOf(holder);
         uint256 juryBefore = vault.juryRewardPoolUsdg();
         vm.prank(makeAddr("keeper"));
@@ -471,7 +471,7 @@ contract ParonWifTest is ParonWifBase {
         vm.expectRevert(WifSlaJury.CannotVoteBothSides.selector);
         jury.voteOnDisputeWithWifBurn(did, false, 1e18);
         uint64 endsAt = jury.getDispute(did).votingEndsAt;
-        vm.warp(block.timestamp + VOTING);
+        vm.warp(vm.getBlockTimestamp() + VOTING);
         vm.prank(juror);
         vm.expectRevert(abi.encodeWithSelector(WifSlaJury.VotingClosed.selector, endsAt));
         jury.voteOnDisputeWithWifBurn(did, true, 1e18);
@@ -493,7 +493,7 @@ contract ParonWifTest is ParonWifBase {
 
         vm.expectRevert(abi.encodeWithSelector(WifSlaJury.VotingStillOpen.selector, jury.getDispute(did).votingEndsAt));
         jury.resolveDispute(did);
-        vm.warp(block.timestamp + VOTING);
+        vm.warp(vm.getBlockTimestamp() + VOTING);
         uint256 holderBefore = usdg.balanceOf(holder);
         uint256 poolBefore = vault.juryRewardPoolUsdg();
         jury.resolveDispute(did);
@@ -530,7 +530,7 @@ contract ParonWifTest is ParonWifBase {
         uint256 did = jury.openSlaDispute(rid, keccak256("weak evidence"), "latency");
         vm.prank(p);
         jury.voteOnDisputeWithWifBurn(did, false, 2_000e18);
-        vm.warp(block.timestamp + VOTING);
+        vm.warp(vm.getBlockTimestamp() + VOTING);
         jury.resolveDispute(did);
         assertEq(uint8(jury.getDispute(did).status), uint8(DisputeStatus.ResolvedUphold));
         assertEq(desk.providerClaimableUsdg(p), r.principalUsdg + r.marginUsdg);
@@ -588,7 +588,7 @@ contract ParonWifTest is ParonWifBase {
         wif.faucet();
         vm.expectRevert(abi.encodeWithSelector(UsdgMock.FaucetCooldown.selector, block.timestamp + 1 hours));
         usdg.faucet();
-        vm.warp(block.timestamp + 1 hours);
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
         wif.faucet();
         vm.stopPrank();
         assertEq(wif.balanceOf(judge), 100_000e18);

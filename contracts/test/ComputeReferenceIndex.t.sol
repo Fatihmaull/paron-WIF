@@ -22,7 +22,7 @@ contract ComputeReferenceIndexTest is Test {
         cri = new ComputeReferenceIndex(owner, att, 2, 1_000, 1 hours, 6 hours);
     }
 
-    /// @dev vm.warp(block.timestamp + x) can be folded by the via-IR optimizer across calls in one function;
+    /// @dev vm.warp(vm.getBlockTimestamp() + x) can be folded by the via-IR optimizer across calls in one function;
     ///      reading the cheatcode timestamp each time keeps consecutive skips cumulative.
     function _skip(uint256 seconds_) internal {
         vm.warp(vm.getBlockTimestamp() + seconds_);

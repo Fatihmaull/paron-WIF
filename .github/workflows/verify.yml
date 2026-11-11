@@ -19,6 +19,7 @@ jobs:
           cache: npm
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          # Pinned so the zero-warning gate is reproducible; bump together with a lint review.
+          version: v1.5.1
       - run: npm ci --no-audit --no-fund
       - run: ./scripts/verify-all.sh
