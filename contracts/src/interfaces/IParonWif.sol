@@ -48,6 +48,11 @@ interface IParonExchangeDesk {
     function executeUphold(uint256 redemptionId) external;
 }
 
+/// @notice Multi-attestor Compute Reference Index (see ComputeReferenceIndex).
+interface IComputeReferenceIndex {
+    function latest() external view returns (uint256 price, uint64 updatedAt);
+}
+
 interface IWifSlaJury {
     function currentBoostedCorridor() external view returns (bool active, uint8 corridorId);
 }

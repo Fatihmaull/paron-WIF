@@ -9,6 +9,7 @@ import {ParonSeriesToken} from "../src/ParonSeriesToken.sol";
 import {WifFlywheelVault} from "../src/WifFlywheelVault.sol";
 import {WifSlaJury} from "../src/WifSlaJury.sol";
 import {ParonExchangeDesk} from "../src/ParonExchangeDesk.sol";
+import {ComputeReferenceIndex} from "../src/ComputeReferenceIndex.sol";
 import {GpuTier} from "../src/libraries/ParonWifTypes.sol";
 
 /// @title DeployParonWif
@@ -19,7 +20,7 @@ import {GpuTier} from "../src/libraries/ParonWifTypes.sol";
 ///        WIF_TOKEN_ADDRESS   existing $WIF (default: deploy WifTokenMock)
 ///        WIF_NATIVE_BURN     true if $WIF exposes burn()/burnFrom() (default: true for the mock, false otherwise -> 0x...dEaD)
 ///        USDG_TOKEN_ADDRESS  existing USDG (default: deploy UsdgMock)
-///        TREASURY_ADDRESS, INDEX_ATTESTOR (default: deployer)
+///        TREASURY_ADDRESS, INDEX_ATTESTORS (comma-separated CRI attestors, default: deployer), CRI_QUORUM (default 1)
 ///        WIF_PRICE_USDG (default 500 = $0.0005), CRI_H100_USDG (default 2200000 = $2.20)
 ///        SEED_MARKET (default true; needs mock tokens or a funded deployer)
 ///      Writes deployments/<chainId>.json, consumed by the indexer and the web app.
@@ -27,6 +28,7 @@ contract DeployParonWif is Script {
     struct Deployment {
         address wif;
         address usdg;
+        address criOracle;
         address seriesToken;
         address vault;
         address desk;
@@ -45,12 +47,18 @@ contract DeployParonWif is Script {
     uint64 internal constant DELIVERY_WINDOW = 24 hours;
     uint64 internal constant CHALLENGE_WINDOW = 6 hours;
     uint64 internal constant MAX_INDEX_AGE = 30 days;
+    uint16 internal constant CRI_MAX_STEP_BPS = 1_000; // each publication moves the index at most +-10%
+    uint64 internal constant CRI_MIN_INTERVAL = 1 hours;
+    uint64 internal constant CRI_WINDOW = 6 hours;
 
     function run() external returns (Deployment memory d) {
         uint256 pk = vm.envUint("PARON_DEPLOYER_PK");
         address deployer = vm.addr(pk);
         address treasury = vm.envOr("TREASURY_ADDRESS", deployer);
-        address attestor = vm.envOr("INDEX_ATTESTOR", deployer);
+        address[] memory defaultAttestors = new address[](1);
+        defaultAttestors[0] = deployer;
+        address[] memory attestors = vm.envOr("INDEX_ATTESTORS", ",", defaultAttestors);
+        uint8 quorum = uint8(vm.envOr("CRI_QUORUM", uint256(1)));
         uint256 wifPrice = vm.envOr("WIF_PRICE_USDG", uint256(500));
         uint256 cri = vm.envOr("CRI_H100_USDG", uint256(2_200_000));
         address wifEnv = vm.envOr("WIF_TOKEN_ADDRESS", address(0));
@@ -64,12 +72,15 @@ contract DeployParonWif is Script {
         d.usdg = d.usdgIsMock ? address(new UsdgMock(deployer, 0)) : usdgEnv;
         ParonSeriesToken seriesToken = new ParonSeriesToken(deployer, "ipfs://paron-wif/series/{id}.json");
         WifFlywheelVault vault = new WifFlywheelVault(deployer, d.wif, d.usdg, d.nativeBurn, treasury, wifPrice);
+        ComputeReferenceIndex criOracle =
+            new ComputeReferenceIndex(deployer, attestors, quorum, CRI_MAX_STEP_BPS, CRI_MIN_INTERVAL, CRI_WINDOW);
+        d.criOracle = address(criOracle);
         ParonExchangeDesk desk = new ParonExchangeDesk(
             address(seriesToken),
             address(vault),
             d.usdg,
             d.wif,
-            deployer,
+            address(criOracle),
             ACK_WINDOW,
             DELIVERY_WINDOW,
             CHALLENGE_WINDOW,
@@ -90,7 +101,11 @@ contract DeployParonWif is Script {
         d.seriesJkt = seriesToken.createSeries(0, GpuTier.H100, thisMonth);
         d.seriesBtm = seriesToken.createSeries(1, GpuTier.H200, thisMonth);
         d.seriesSgp = seriesToken.createSeries(3, GpuTier.B200, nextMonth);
-        desk.attestReferenceIndex(cri, keccak256(abi.encode("CRI-H100", block.timestamp, cri)));
+        // The first publication needs the quorum. With the default single-attestor testnet setup the deployer seeds it;
+        // with several attestors they submit their own prices after deployment.
+        if (attestors.length == 1 && attestors[0] == deployer && quorum == 1) {
+            criOracle.submit(cri, keccak256(abi.encode("CRI-H100", block.timestamp, cri)));
+        }
 
         d.seriesToken = address(seriesToken);
         d.vault = address(vault);
@@ -100,10 +115,9 @@ contract DeployParonWif is Script {
         if (vm.envOr("SEED_MARKET", true) && d.wifIsMock && d.usdgIsMock) {
             _seed(d, deployer);
         }
-        if (attestor != deployer) desk.setIndexAttestor(attestor);
         vm.stopBroadcast();
 
-        _writeManifest(d, deployer, treasury, attestor, wifPrice);
+        _writeManifest(d, deployer, treasury, attestors, quorum, wifPrice);
         console2.log("ParonExchangeDesk", d.desk);
         console2.log("WifFlywheelVault", d.vault);
         console2.log("WifSlaJury", d.jury);
@@ -147,7 +161,14 @@ contract DeployParonWif is Script {
         desk.buySeriesOrPlaceBid(d.seriesSgp, 300, 2_220_000, true);
     }
 
-    function _writeManifest(Deployment memory d, address deployer, address treasury, address attestor, uint256 wifPrice)
+    function _writeManifest(
+        Deployment memory d,
+        address deployer,
+        address treasury,
+        address[] memory attestors,
+        uint8 quorum,
+        uint256 wifPrice
+    )
         internal
     {
         string memory c = "contracts";
@@ -156,6 +177,7 @@ contract DeployParonWif is Script {
         vm.serializeAddress(c, "ParonSeriesToken", d.seriesToken);
         vm.serializeAddress(c, "WifFlywheelVault", d.vault);
         vm.serializeAddress(c, "WifSlaJury", d.jury);
+        vm.serializeAddress(c, "ComputeReferenceIndex", d.criOracle);
         string memory contractsJson = vm.serializeAddress(c, "ParonExchangeDesk", d.desk);
 
         string memory s = "series";
@@ -170,7 +192,8 @@ contract DeployParonWif is Script {
         vm.serializeUint(root, "startBlock", block.number);
         vm.serializeAddress(root, "deployer", deployer);
         vm.serializeAddress(root, "treasury", treasury);
-        vm.serializeAddress(root, "indexAttestor", attestor);
+        vm.serializeAddress(root, "indexAttestors", attestors);
+        vm.serializeUint(root, "criQuorum", quorum);
         vm.serializeBool(root, "wifIsMock", d.wifIsMock);
         vm.serializeBool(root, "usdgIsMock", d.usdgIsMock);
         vm.serializeBool(root, "nativeBurn", d.nativeBurn);

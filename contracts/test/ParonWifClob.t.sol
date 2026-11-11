@@ -4,7 +4,6 @@ pragma solidity 0.8.30;
 import {ParonWifBase} from "./ParonWifBase.sol";
 import {ParonExchangeDesk} from "../src/ParonExchangeDesk.sol";
 import {ParonClobLib} from "../src/libraries/ParonClobLib.sol";
-import {Order} from "../src/libraries/ParonWifTypes.sol";
 
 /// @notice Order-book griefing resistance: minimum notional, per-maker order cap, worst-level eviction.
 contract ParonWifClobTest is ParonWifBase {

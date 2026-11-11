@@ -19,8 +19,9 @@ const CONTRACTS = {
   wifFlywheelVault: "WifFlywheelVault",
   wifSlaJury: "WifSlaJury",
   paronExchangeDesk: "ParonExchangeDesk",
+  computeReferenceIndex: "ComputeReferenceIndex",
 };
-const DESK_LIBRARIES = ["ParonClobLib", "ParonSettlementLib"];
+const DESK_LIBRARIES = ["ParonClobLib", "ParonSettlementLib", "ParonLotLib"];
 
 function load(name) {
   const file = join(out, `${name}.sol`, `${name}.json`);

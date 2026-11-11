@@ -344,8 +344,10 @@ contract ParonWifTest is ParonWifBase {
         address agent = _actor("hedging-agent", 0, 1_000e6);
         _buy(agent, seriesJkt, 20, 2_000_000, false);
 
+        vm.warp(block.timestamp + CRI_MIN_INTERVAL);
         vm.prank(attestor);
-        desk.attestReferenceIndex(2_400_000, keccak256("CRI spike +20%"));
+        criOracle.submit(2_400_000, keccak256("CRI spike +9%")); // within the +-10% step
+        assertEq(desk.criH100Usdg(), 2_400_000);
         vm.prank(agent);
         uint256 payout = desk.settleCashAtIndex(seriesJkt, 10);
         // collateral $20 principal + $5 margin; index value $24; 30 bps fee
@@ -353,8 +355,10 @@ contract ParonWifTest is ParonWifBase {
         assertEq(desk.providerClaimableUsdg(p), 1_000_000, "provider keeps collateral above the index value");
         assertEq(seriesToken.balanceOf(agent, seriesJkt), 10);
 
+        vm.warp(block.timestamp + CRI_MIN_INTERVAL);
         vm.prank(attestor);
-        desk.attestReferenceIndex(3_000_000, keccak256("CRI spike +50%"));
+        criOracle.submit(3_000_000, keccak256("CRI spike +25%"));
+        assertEq(desk.criH100Usdg(), 2_640_000, "a +25% report is clamped to one +10% step");
         vm.prank(agent);
         payout = desk.settleCashAtIndex(seriesJkt, 10);
         assertEq(payout, 25_000_000 - 75_000, "payout capped at principal + margin");

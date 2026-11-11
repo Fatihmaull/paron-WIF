@@ -4,10 +4,11 @@ pragma solidity 0.8.30;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {IParonSeriesToken, IWifFlywheelVault, IWifSlaJury} from "./interfaces/IParonWif.sol";
+import {IComputeReferenceIndex, IParonSeriesToken, IWifFlywheelVault, IWifSlaJury} from "./interfaces/IParonWif.sol";
 import {ParonWifConstants as C} from "./libraries/ParonWifConstants.sol";
 import {ParonClobLib} from "./libraries/ParonClobLib.sol";
 import {ParonSettlementLib} from "./libraries/ParonSettlementLib.sol";
+import {ParonLotLib} from "./libraries/ParonLotLib.sol";
 import {
     Lot, Order, ProviderProfile, Redemption, RedemptionState, SeriesInfo, SeriesMarket
 } from "./libraries/ParonWifTypes.sol";
@@ -49,12 +50,9 @@ contract ParonExchangeDesk is ReentrancyGuard {
     uint64 public immutable maxIndexAge;
 
     IWifSlaJury public jury;
-    address public indexAttestor;
+    /// @notice The multi-attestor CRI-H100 oracle that Mode A settles against.
+    IComputeReferenceIndex public immutable criOracle;
 
-    // Compute Reference Index (USDG per CU, 6 decimals)
-    uint256 public criH100Usdg;
-    uint64 public criUpdatedAt;
-    bytes32 public criSourceHash;
 
     // Providers
     mapping(address provider => ProviderProfile) private _providers;
@@ -82,8 +80,6 @@ contract ParonExchangeDesk is ReentrancyGuard {
     mapping(uint256 redemptionId => Redemption) private _redemptions;
 
     event JurySet(address indexed jury);
-    event IndexAttestorSet(address indexed attestor);
-    event ReferenceIndexAttested(uint256 priceUsdgPerCu, bytes32 sourceHash, uint64 timestamp);
     event ProviderRegistered(address indexed provider, string metadataUri, uint256 wifStaked, uint256 totalStaked);
     event AttestationSignerSet(address indexed provider, address indexed signer);
     event LotMinted(
@@ -155,7 +151,6 @@ contract ParonExchangeDesk is ReentrancyGuard {
     error JuryAlreadySet();
     error NotDeployer();
     error NotJury();
-    error NotIndexAttestor();
     error NotRegisteredProvider();
     error UnknownLot(uint256 lotId);
     error SeriesNotTradable(uint256 seriesId);
@@ -168,8 +163,6 @@ contract ParonExchangeDesk is ReentrancyGuard {
     error OutsideDeliveryWindow();
     error OutsideSettlementWindow();
     error StaleIndex();
-    error LotCapacity(uint256 lotId);
-    error NoLotCapacity(uint256 seriesId, uint256 cuAmount);
     error NotProvider();
     error NotHolder();
     error InvalidState(RedemptionState state);
@@ -189,7 +182,7 @@ contract ParonExchangeDesk is ReentrancyGuard {
         address vault_,
         address usdg_,
         address wif_,
-        address indexAttestor_,
+        address criOracle_,
         uint64 ackWindow_,
         uint64 deliveryWindow_,
         uint64 challengeWindow_,
@@ -197,14 +190,14 @@ contract ParonExchangeDesk is ReentrancyGuard {
     ) {
         if (
             series_ == address(0) || vault_ == address(0) || usdg_ == address(0) || wif_ == address(0)
-                || indexAttestor_ == address(0)
+                || criOracle_ == address(0)
         ) revert ZeroAddress();
         deployer = msg.sender;
         series = IParonSeriesToken(series_);
         vault = IWifFlywheelVault(vault_);
         usdg = IERC20(usdg_);
         wif = IERC20(wif_);
-        indexAttestor = indexAttestor_;
+        criOracle = IComputeReferenceIndex(criOracle_);
         ackWindow = ackWindow_;
         deliveryWindow = deliveryWindow_;
         challengeWindow = challengeWindow_;
@@ -214,7 +207,7 @@ contract ParonExchangeDesk is ReentrancyGuard {
     }
 
     // ------------------------------------------------------------------
-    // Wiring and the Compute Reference Index
+    // Wiring
     // ------------------------------------------------------------------
 
     function setJury(address jury_) external {
@@ -225,23 +218,13 @@ contract ParonExchangeDesk is ReentrancyGuard {
         emit JurySet(jury_);
     }
 
-    /// @notice The attestor rotates itself (e.g. to a multisig or a decentralized oracle adapter).
-    function setIndexAttestor(address attestor) external {
-        if (msg.sender != indexAttestor) revert NotIndexAttestor();
-        if (attestor == address(0)) revert ZeroAddress();
-        indexAttestor = attestor;
-        emit IndexAttestorSet(attestor);
+    /// @notice CRI-H100 in USDG per CU (6 decimals), as published by the oracle.
+    function criH100Usdg() external view returns (uint256 p) {
+        (p,) = criOracle.latest();
     }
 
-    /// @notice Posts the CRI-H100 price (USDG per CU) with a hash of its source data
-    ///         (venue prints, on-chain VWAP, rate cards).
-    function attestReferenceIndex(uint256 priceUsdgPerCu, bytes32 sourceHash) external {
-        if (msg.sender != indexAttestor) revert NotIndexAttestor();
-        if (priceUsdgPerCu == 0) revert InvalidPrice();
-        criH100Usdg = priceUsdgPerCu;
-        criUpdatedAt = uint64(block.timestamp);
-        criSourceHash = sourceHash;
-        emit ReferenceIndexAttested(priceUsdgPerCu, sourceHash, uint64(block.timestamp));
+    function criUpdatedAt() external view returns (uint64 t) {
+        (, t) = criOracle.latest();
     }
 
     // ------------------------------------------------------------------
@@ -420,14 +403,15 @@ contract ParonExchangeDesk is ReentrancyGuard {
         if (block.timestamp < s.deliveryStart || block.timestamp >= uint256(s.deliveryEnd) + C.SETTLEMENT_GRACE) {
             revert OutsideSettlementWindow();
         }
-        if (criUpdatedAt == 0 || block.timestamp > uint256(criUpdatedAt) + maxIndexAge) revert StaleIndex();
+        (uint256 cri, uint64 criAt) = criOracle.latest();
+        if (criAt == 0 || block.timestamp > uint256(criAt) + maxIndexAge) revert StaleIndex();
         if (cuAmount == 0) revert ZeroAmount();
 
         uint256 lotId = _assignLot(seriesId, cuAmount, 0);
         address provider = _lots[lotId].provider;
         (uint256 principal, uint256 margin) = _takeLotShare(lotId, cuAmount);
         uint256 collateral = principal + margin;
-        uint256 gross = cuAmount * criH100Usdg;
+        uint256 gross = cuAmount * cri;
         uint256 settleValue = gross < collateral ? gross : collateral;
         uint256 fee =
             (settleValue * (vault.hasWifFeeDiscount(msg.sender) ? C.WIF_FEE_BPS : C.STANDARD_FEE_BPS)) / C.BPS;
@@ -441,7 +425,7 @@ contract ParonExchangeDesk is ReentrancyGuard {
             uint256 burned = vault.processProtocolFeeAndBurn(msg.sender, fee, 0, "CASH_SETTLEMENT");
             emit FeeCharged(msg.sender, seriesId, fee, burned, false);
         }
-        emit CashSettled(seriesId, lotId, msg.sender, cuAmount, criH100Usdg, payoutUsdg, fee, residual);
+        emit CashSettled(seriesId, lotId, msg.sender, cuAmount, cri, payoutUsdg, fee, residual);
     }
 
     // ------------------------------------------------------------------
@@ -783,65 +767,19 @@ contract ParonExchangeDesk is ReentrancyGuard {
     // ------------------------------------------------------------------
 
     function _assignLot(uint256 seriesId, uint256 cuAmount, uint256 preferredLotId) private returns (uint256) {
-        if (preferredLotId != 0) {
-            Lot storage p = _lots[preferredLotId];
-            if (p.seriesId != seriesId || p.cuOutstanding < cuAmount) revert LotCapacity(preferredLotId);
-            return preferredLotId;
-        }
-        uint256[] storage ids = _seriesLots[seriesId];
-        uint256 n = ids.length;
-        uint256 scanned;
-        for (uint256 i = _lotCursor[seriesId]; i < n && scanned < C.MAX_LOT_SCAN; ++i) {
-            Lot storage lot = _lots[ids[i]];
-            if (lot.closed && i == _lotCursor[seriesId]) {
-                _lotCursor[seriesId] = i + 1;
-                continue;
-            }
-            if (lot.cuOutstanding >= cuAmount) return ids[i];
-            ++scanned;
-        }
-        revert NoLotCapacity(seriesId, cuAmount);
+        return ParonLotLib.assignLot(_lots, _seriesLots, _lotCursor, seriesId, cuAmount, preferredLotId);
     }
 
-    /// @dev Moves a pro-rata slice of escrowed principal and locked margin out of a lot.
     function _takeLotShare(uint256 lotId, uint256 cuAmount) private returns (uint256 principal, uint256 margin) {
-        Lot storage lot = _lots[lotId];
-        principal = (lot.escrowUsdg * cuAmount) / lot.cuOutstanding;
-        margin = (lot.marginLocked * cuAmount) / (lot.cuOutstanding + lot.cuUnsold);
-        lot.escrowUsdg -= principal;
-        lot.marginLocked -= margin;
-        lot.cuOutstanding -= cuAmount;
-        if (lot.cuOutstanding == 0 && lot.cuUnsold == 0) _closeLot(lotId);
+        return ParonLotLib.takeShare(_lots, providerClaimableUsdg, openLotsAtTier, vault, lotId, cuAmount);
     }
 
     function _cancelPrimary(uint256 lotId, uint256 qty) private {
-        Lot storage lot = _lots[lotId];
-        uint256 release = (lot.marginLocked * qty) / (lot.cuOutstanding + lot.cuUnsold);
-        lot.marginLocked -= release;
-        lot.cuUnsold -= qty;
-        lot.askOrderId = 0;
-        unsoldCu[lot.seriesId] -= qty;
-        series.burn(address(this), lot.seriesId, qty);
-        providerClaimableUsdg[lot.provider] += release;
-        if (lot.cuOutstanding == 0 && lot.cuUnsold == 0) _closeLot(lotId);
-    }
-
-    function _closeLot(uint256 lotId) private {
-        Lot storage lot = _lots[lotId];
-        if (lot.closed) return;
-        lot.closed = true;
-        uint256 residual = lot.marginLocked + lot.escrowUsdg;
-        if (residual > 0) {
-            lot.marginLocked = 0;
-            lot.escrowUsdg = 0;
-            providerClaimableUsdg[lot.provider] += residual;
-        }
-        openLotsAtTier[lot.provider][lot.tier] -= 1;
-        _syncStakeLock(lot.provider);
+        ParonLotLib.cancelPrimary(_lots, providerClaimableUsdg, openLotsAtTier, unsoldCu, series, vault, lotId, qty);
     }
 
     function _syncStakeLock(address provider) private {
-        ParonSettlementLib.syncStakeLock(openLotsAtTier, vault, provider);
+        ParonLotLib.syncStakeLock(openLotsAtTier, vault, provider);
     }
 
     // ------------------------------------------------------------------
