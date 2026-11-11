@@ -28,7 +28,10 @@ import {
   MARGIN_TIER1_BPS,
   MARGIN_TIER2_BPS,
   MAX_FILLS_PER_TX,
+  MAX_EVICTIONS_PER_TX,
   MAX_LEVELS,
+  MAX_ORDERS_PER_MAKER,
+  MIN_ORDER_NOTIONAL,
   MAX_LOT_SCAN,
   PRICE_TICK,
   REBATE_PRECISION,
@@ -133,6 +136,7 @@ export type LedgerState = {
     orders: Map<number, Order>;
     levels: Map<string, bigint[]>;
     levelOf: Map<string, Level>;
+    makerOrders: Map<string, number>;
     unsoldCu: Map<number, bigint>;
     lastTradePrice: Map<number, bigint>;
     volumeCu: Map<number, bigint>;
@@ -204,6 +208,7 @@ export function defaultSystemAddresses(): SystemAddresses {
 }
 
 const lower = (a: string) => a.toLowerCase() as Address;
+const makerKey = (seriesId: number, isBid: boolean, maker: string) => `${seriesId}:${isBid ? "b" : "a"}:${maker.toLowerCase()}`;
 const sideKey = (seriesId: number, isBid: boolean) => `${seriesId}:${isBid ? "b" : "a"}`;
 const levelKey = (seriesId: number, isBid: boolean, price: bigint) => `${seriesId}:${isBid ? "b" : "a"}:${price}`;
 const pairKey = (a: number | string, b: string) => `${a}:${lower(b)}`;
@@ -272,6 +277,7 @@ export class ParonLedger {
         orders: new Map(),
         levels: new Map(),
         levelOf: new Map(),
+        makerOrders: new Map(),
         unsoldCu: new Map(),
         lastTradePrice: new Map(),
         volumeCu: new Map(),
@@ -937,6 +943,7 @@ export class ParonLedger {
       this.requireTradable(seriesId);
       if (cuAmount === 0n) throw new ParonError("ZeroAmount");
       this.checkPrice(askPriceUsdg);
+      this.checkMinNotional(cuAmount * askPriceUsdg);
 
       const d = this.s.desk;
       const marginBps = this.requiredMarginBpsFor(provider, seriesId);
@@ -1030,7 +1037,10 @@ export class ParonLedger {
         this.chargeTakerFee(buyer, seriesId, notional, useWifDiscount);
       }
       let orderId = 0;
-      if (remaining > 0n) {
+      if (remaining > 0n && remaining * maxPriceUsdg < MIN_ORDER_NOTIONAL) {
+        // A dust remainder never rests. A pure dust order that fills nothing is rejected outright.
+        if (filled === 0n) throw new ParonError("OrderTooSmall", { notional: remaining * maxPriceUsdg, minNotional: MIN_ORDER_NOTIONAL });
+      } else if (remaining > 0n) {
         const cost = remaining * maxPriceUsdg;
         const escrow = cost + (cost * STANDARD_FEE_BPS) / BPS;
         this.move(this.s.usdg, buyer, this.s.addr.desk, escrow);
@@ -1049,7 +1059,15 @@ export class ParonLedger {
       this.cuMove(seriesId, seller, this.s.addr.desk, cuAmount);
       const filledCu = this.matchAskAgainstBids(seriesId, seller, cuAmount, priceUsdg, 0);
       let orderId = 0;
-      if (cuAmount > filledCu) orderId = this.newOrder(seriesId, seller, false, false, priceUsdg, cuAmount - filledCu, 0n, 0);
+      const rest = cuAmount - filledCu;
+      if (rest > 0n) {
+        if (rest * priceUsdg >= MIN_ORDER_NOTIONAL) {
+          orderId = this.newOrder(seriesId, seller, false, false, priceUsdg, rest, 0n, 0);
+        } else {
+          if (filledCu === 0n) throw new ParonError("OrderTooSmall", { notional: rest * priceUsdg, minNotional: MIN_ORDER_NOTIONAL });
+          this.cuMove(seriesId, this.s.addr.desk, seller, rest); // dust remainder goes back
+        }
+      }
       return { filledCu, orderId };
     });
   }
@@ -1627,6 +1645,8 @@ export class ParonLedger {
     o.prev = 0;
     o.next = 0;
     o.active = false;
+    const mk = makerKey(o.seriesId, o.isBid, o.maker);
+    d.makerOrders.set(mk, (d.makerOrders.get(mk) ?? 0) - 1);
     if (level.head[0] === 0 && level.head[1] === 0) {
       const arr = d.levels.get(sideKey(o.seriesId, o.isBid))!;
       const idx = arr.lastIndexOf(o.price);
@@ -1634,9 +1654,48 @@ export class ParonLedger {
     }
   }
 
+  private checkMinNotional(notional: bigint): void {
+    if (notional < MIN_ORDER_NOTIONAL) throw new ParonError("OrderTooSmall", { notional, minNotional: MIN_ORDER_NOTIONAL });
+  }
+
+  /** ParonClobLib.evictForBetterPrice: a strictly better price evicts the worst level of a full side. */
+  private evictForBetterPrice(seriesId: number, isBid: boolean, price: bigint): void {
+    const d = this.s.desk;
+    const arr = d.levels.get(sideKey(seriesId, isBid)) ?? [];
+    if (arr.length < MAX_LEVELS) return;
+    const existing = d.levelOf.get(levelKey(seriesId, isBid, price));
+    if (existing && (existing.head[0] !== 0 || existing.head[1] !== 0)) return; // joins an existing level
+    const worst = arr[0];
+    if (isBid ? price <= worst : price >= worst) throw new ParonError("TooManyLevels");
+    for (let n = 0; n < MAX_EVICTIONS_PER_TX; n += 1) {
+      if (arr.length < MAX_LEVELS) return;
+      const lvl = d.levelOf.get(levelKey(seriesId, isBid, worst))!;
+      const oid = lvl.head[0] !== 0 ? lvl.head[0] : lvl.head[1];
+      const o = d.orders.get(oid)!;
+      if (o.lotId !== 0) throw new ParonError("TooManyLevels"); // collateralised primary asks are never evicted
+      const qty = o.qtyRemaining;
+      this.clobUnlink(oid);
+      o.qtyRemaining = 0n;
+      if (isBid) {
+        const refund = o.escrowUsdg;
+        o.escrowUsdg = 0n;
+        if (refund > 0n) this.move(this.s.usdg, this.s.addr.desk, o.maker, refund);
+      } else {
+        this.cuMove(seriesId, this.s.addr.desk, o.maker, qty);
+      }
+      this.emit("ParonExchangeDesk", "OrderCancelled", { orderId: oid, seriesId, qtyReturned: qty });
+    }
+    throw new ParonError("TooManyLevels");
+  }
+
   private newOrder(seriesId: number, maker: Address, isBid: boolean, wifDiscount: boolean, price: bigint, qty: bigint, escrow: bigint, lotId: number): number {
     const d = this.s.desk;
     const lane: 0 | 1 = this.hasWifFeeDiscount(maker) ? 0 : 1;
+    this.evictForBetterPrice(seriesId, isBid, price);
+    const mk = makerKey(seriesId, isBid, maker);
+    const held = d.makerOrders.get(mk) ?? 0;
+    if (held >= MAX_ORDERS_PER_MAKER) throw new ParonError("TooManyOrders", { maker: lower(maker), max: MAX_ORDERS_PER_MAKER });
+    d.makerOrders.set(mk, held + 1);
     const orderId = ++d.orderCount;
     const order: Order = {
       id: orderId,

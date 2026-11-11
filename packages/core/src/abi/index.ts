@@ -6625,6 +6625,22 @@ export const paronExchangeDeskAbi = [
   },
   {
     "type": "error",
+    "name": "OrderTooSmall",
+    "inputs": [
+      {
+        "name": "notional",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minNotional",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "OutsideDeliveryWindow",
     "inputs": []
   },
@@ -6695,6 +6711,22 @@ export const paronExchangeDeskAbi = [
     "type": "error",
     "name": "TooManyLevels",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TooManyOrders",
+    "inputs": [
+      {
+        "name": "maker",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "max",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "event",

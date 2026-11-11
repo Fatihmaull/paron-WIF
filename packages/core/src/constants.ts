@@ -57,6 +57,12 @@ export const BUYBACK_SELL_DISCOUNT_BPS = 100n;
 // Market structure
 export const PRICE_TICK = 10_000n; // 0.01 USDG
 export const MAX_LEVELS = 24;
+/** Minimum notional (USDG) of a resting order or primary mint: $5. */
+export const MIN_ORDER_NOTIONAL = 5_000_000n;
+/** Active orders one address may hold per series and side. */
+export const MAX_ORDERS_PER_MAKER = 8;
+/** Orders one transaction may evict from the worst level to admit a better price. */
+export const MAX_EVICTIONS_PER_TX = 16;
 export const MAX_FILLS_PER_TX = 32;
 export const MAX_LOT_SCAN = 64;
 export const SETTLEMENT_GRACE = 7n * 86_400n;
