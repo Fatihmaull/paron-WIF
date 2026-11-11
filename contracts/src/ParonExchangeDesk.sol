@@ -401,18 +401,11 @@ contract ParonExchangeDesk is ReentrancyGuard {
         Order storage o = _clob.orders[orderId];
         if (!o.active) revert OrderNotActive(orderId);
         if (o.maker != msg.sender) revert NotOrderMaker();
+        if (o.lotId == 0) return _clob.cancelSecondary(usdg, series, orderId);
         uint256 qty = o.qtyRemaining;
         _clob.unlink(orderId);
         o.qtyRemaining = 0;
-        if (o.isBid) {
-            uint256 refund = o.escrowUsdg;
-            o.escrowUsdg = 0;
-            if (refund > 0) usdg.safeTransfer(msg.sender, refund);
-        } else if (o.lotId != 0) {
-            _cancelPrimary(o.lotId, qty);
-        } else {
-            series.deskTransfer(address(this), msg.sender, o.seriesId, qty);
-        }
+        _cancelPrimary(o.lotId, qty);
         emit OrderCancelled(orderId, o.seriesId, qty);
     }
 
@@ -619,10 +612,6 @@ contract ParonExchangeDesk is ReentrancyGuard {
         return _clob.orderCount;
     }
 
-    /// @notice Active resting orders `maker` holds on one side of a series (cap: 8).
-    function activeOrdersOf(uint256 seriesId, bool isBid, address maker) external view returns (uint256) {
-        return _clob.activeOrders(seriesId, isBid, maker);
-    }
 
     function getRedemption(uint256 redemptionId) external view returns (Redemption memory) {
         return _redemptions[redemptionId];
@@ -784,6 +773,7 @@ contract ParonExchangeDesk is ReentrancyGuard {
         uint256 lotId
     ) private returns (uint256 orderId) {
         uint8 lane = vault.hasWifFeeDiscount(maker) ? 0 : 1;
+        _clob.evictForBetterPrice(usdg, series, seriesId, isBid, price);
         orderId = _clob.place(seriesId, maker, isBid, wifDiscount, lane, price, qty, escrow, lotId);
         emit OrderPlaced(orderId, seriesId, maker, isBid, price, qty, lotId, lane);
     }
@@ -851,10 +841,7 @@ contract ParonExchangeDesk is ReentrancyGuard {
     }
 
     function _syncStakeLock(address provider) private {
-        uint256 lockAmount;
-        if (openLotsAtTier[provider][2] > 0) lockAmount = C.TIER2_STAKE;
-        else if (openLotsAtTier[provider][1] > 0) lockAmount = C.TIER1_STAKE;
-        vault.setStakeLock(provider, lockAmount);
+        ParonSettlementLib.syncStakeLock(openLotsAtTier, vault, provider);
     }
 
     // ------------------------------------------------------------------

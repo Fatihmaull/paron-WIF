@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IParonSeriesToken} from "../interfaces/IParonWif.sol";
 import {ParonWifConstants as C} from "./ParonWifConstants.sol";
 import {Order} from "./ParonWifTypes.sol";
 
@@ -11,6 +14,8 @@ import {Order} from "./ParonWifTypes.sol";
 ///      Each level holds two FIFO queues: lane 0 is the $WIF priority lane (makers holding or staking
 ///      >= 10k $WIF), lane 1 the standard lane. Within a level, lane 0 always fills first.
 library ParonClobLib {
+    using SafeERC20 for IERC20;
+
     struct Level {
         uint256[2] head;
         uint256[2] tail;
@@ -24,6 +29,8 @@ library ParonClobLib {
         mapping(uint256 seriesId => mapping(bool isBid => mapping(uint256 price => Level))) levelOf;
         mapping(uint256 seriesId => mapping(bool isBid => mapping(address maker => uint256 count))) makerOrders;
     }
+
+    event OrderCancelled(uint256 indexed orderId, uint256 indexed seriesId, uint256 qtyReturned);
 
     error TooManyLevels();
     error TooManyOrders(address maker, uint256 max);
@@ -71,6 +78,56 @@ library ParonClobLib {
         level.qty += qty;
     }
 
+    /// @notice Makes room for a new price level when a side already holds MAX_LEVELS: an order at a price
+    ///         strictly better than the worst level evicts that level's orders (escrow or CU is refunded to
+    ///         each maker and OrderCancelled is emitted). Collateralised primary asks are never evicted, and
+    ///         an order that is not better than the worst level reverts as before. Runs in the desk's context.
+    function evictForBetterPrice(
+        Book storage b,
+        IERC20 usdg,
+        IParonSeriesToken series,
+        uint256 seriesId,
+        bool isBid,
+        uint256 price
+    ) external {
+        uint256[] storage arr = b.levels[seriesId][isBid];
+        if (arr.length < C.MAX_LEVELS) return;
+        Level storage existing = b.levelOf[seriesId][isBid][price];
+        if (existing.head[0] != 0 || existing.head[1] != 0) return; // joins an existing level
+        uint256 worst = arr[0];
+        if (isBid ? price <= worst : price >= worst) revert TooManyLevels();
+        for (uint256 n; n < C.MAX_EVICTIONS_PER_TX; ++n) {
+            if (arr.length < C.MAX_LEVELS) return;
+            Level storage lvl = b.levelOf[seriesId][isBid][worst];
+            uint256 oid = lvl.head[0] != 0 ? lvl.head[0] : lvl.head[1];
+            Order storage o = b.orders[oid];
+            if (o.lotId != 0) revert TooManyLevels();
+            _cancelSecondary(b, usdg, series, oid);
+        }
+        revert TooManyLevels();
+    }
+
+    /// @notice Cancels a resting bid or secondary ask and refunds its maker (escrow or CU).
+    function cancelSecondary(Book storage b, IERC20 usdg, IParonSeriesToken series, uint256 orderId) external {
+        _cancelSecondary(b, usdg, series, orderId);
+    }
+
+    function _cancelSecondary(Book storage b, IERC20 usdg, IParonSeriesToken series, uint256 orderId) private {
+        Order storage o = b.orders[orderId];
+        address maker = o.maker;
+        uint256 qty = o.qtyRemaining;
+        _unlink(b, orderId);
+        o.qtyRemaining = 0;
+        if (o.isBid) {
+            uint256 refund = o.escrowUsdg;
+            o.escrowUsdg = 0;
+            if (refund > 0) usdg.safeTransfer(maker, refund);
+        } else {
+            series.deskTransfer(address(this), maker, o.seriesId, qty);
+        }
+        emit OrderCancelled(orderId, o.seriesId, qty);
+    }
+
     /// @notice Removes `take` CU from an order; unlinks it once empty. Returns true when fully filled.
     function fill(Book storage b, uint256 orderId, uint256 take) external returns (bool done) {
         Order storage o = b.orders[orderId];
@@ -92,10 +149,6 @@ library ParonClobLib {
         price = arr[arr.length - 1];
         Level storage level = b.levelOf[seriesId][isBid][price];
         orderId = level.head[0] != 0 ? level.head[0] : level.head[1];
-    }
-
-    function activeOrders(Book storage b, uint256 seriesId, bool isBid, address maker) external view returns (uint256) {
-        return b.makerOrders[seriesId][isBid][maker];
     }
 
     function bestPrices(Book storage b, uint256 seriesId) external view returns (uint256 bestBid, uint256 bestAsk) {

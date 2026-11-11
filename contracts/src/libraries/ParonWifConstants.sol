@@ -62,6 +62,8 @@ library ParonWifConstants {
     /// @dev Active orders one address may hold per series and side. One wallet can no longer occupy
     ///      more than a third of the 24 price levels.
     uint256 internal constant MAX_ORDERS_PER_MAKER = 8;
+    /// @dev Orders one transaction may evict from the worst price level to make room for a better one.
+    uint256 internal constant MAX_EVICTIONS_PER_TX = 16;
     uint256 internal constant MAX_FILLS_PER_TX = 32;
     uint256 internal constant MAX_LOT_SCAN = 64;
     uint256 internal constant SETTLEMENT_GRACE = 7 days;
