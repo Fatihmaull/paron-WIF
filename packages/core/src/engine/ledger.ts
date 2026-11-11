@@ -28,7 +28,13 @@ import {
   MARGIN_TIER1_BPS,
   MARGIN_TIER2_BPS,
   MAX_FILLS_PER_TX,
+  CRI_MAX_STEP_BPS,
+  CRI_MIN_INTERVAL,
+  CRI_WINDOW,
   MAX_EVICTIONS_PER_TX,
+  MAX_UINT256,
+  WIF_PRICE_MAX_MOVE_BPS,
+  WIF_PRICE_MIN_INTERVAL,
   MAX_LEVELS,
   MAX_ORDERS_PER_MAKER,
   MIN_ORDER_NOTIONAL,
@@ -104,6 +110,7 @@ export type LedgerState = {
   seriesCount: number;
   vault: {
     wifPriceUsdg: bigint;
+    lastPriceUpdate: bigint;
     priceOracle: Address;
     stakedWif: Map<Address, bigint>;
     stakeLock: Map<Address, bigint>;
@@ -120,10 +127,15 @@ export type LedgerState = {
     totalRebatesDistributedUsdg: bigint;
     burnCount: number;
   };
+  cri: {
+    attestors: Address[];
+    quorum: number;
+    subs: Map<Address, { price: bigint; at: bigint; sourceHash: Hex }>;
+    price: bigint;
+    updatedAt: bigint;
+    sourceHash: Hex;
+  };
   desk: {
-    criH100Usdg: bigint;
-    criUpdatedAt: bigint;
-    criSourceHash: Hex;
     providers: Map<Address, ProviderProfile>;
     providerOrder: Address[];
     claimable: Map<Address, bigint>;
@@ -221,6 +233,8 @@ export type LedgerOptions = {
   params?: Partial<WorldParams>;
   genesisTime?: bigint;
   addresses?: Partial<SystemAddresses>;
+  /** CRI attestor set (default: the single system attestor with quorum 1, like the testnet deployment). */
+  cri?: { attestors?: Address[]; quorum?: number };
 };
 
 export class ParonLedger {
@@ -245,6 +259,7 @@ export class ParonLedger {
       seriesCount: 0,
       vault: {
         wifPriceUsdg: params.wifPriceUsdg,
+        lastPriceUpdate: now,
         priceOracle: lower(addr.deployer),
         stakedWif: new Map(),
         stakeLock: new Map(),
@@ -261,10 +276,15 @@ export class ParonLedger {
         totalRebatesDistributedUsdg: 0n,
         burnCount: 0,
       },
+      cri: {
+        attestors: (options.cri?.attestors ?? [addr.attestor]).map(lower),
+        quorum: options.cri?.quorum ?? 1,
+        subs: new Map(),
+        price: 0n,
+        updatedAt: 0n,
+        sourceHash: "0x",
+      },
       desk: {
-        criH100Usdg: 0n,
-        criUpdatedAt: 0n,
-        criSourceHash: "0x",
         providers: new Map(),
         providerOrder: [],
         claimable: new Map(),
@@ -615,7 +635,15 @@ export class ParonLedger {
     this.tx(() => {
       if (lower(caller) !== this.s.vault.priceOracle) throw new ParonError("NotOracle");
       if (priceUsdg === 0n) throw new ParonError("InvalidPrice");
-      this.s.vault.wifPriceUsdg = priceUsdg;
+      const v = this.s.vault;
+      const availableAt = v.lastPriceUpdate + WIF_PRICE_MIN_INTERVAL;
+      if (this.s.now < availableAt) throw new ParonError("PriceUpdateTooSoon", { availableAt });
+      const old = v.wifPriceUsdg;
+      if (priceUsdg > (old * (BPS + WIF_PRICE_MAX_MOVE_BPS)) / BPS || priceUsdg < (old * (BPS - WIF_PRICE_MAX_MOVE_BPS)) / BPS) {
+        throw new ParonError("PriceMoveTooLarge", { oldPrice: old, newPrice: priceUsdg });
+      }
+      v.wifPriceUsdg = priceUsdg;
+      v.lastPriceUpdate = this.s.now;
       this.emit("WifFlywheelVault", "WifPriceUpdated", { priceUsdg });
     });
   }
@@ -845,15 +873,43 @@ export class ParonLedger {
   // ParonExchangeDesk: index, providers
   // ==================================================================
 
+  /** ComputeReferenceIndex._publish: quorum of fresh submissions, median, +-10% clamp, one publication per hour. */
+  private criPublish(src: Hex): void {
+    const c = this.s.cri;
+    if (c.updatedAt !== 0n && this.s.now < c.updatedAt + CRI_MIN_INTERVAL) return;
+    const fresh: bigint[] = [];
+    for (const a of c.attestors) {
+      const s = c.subs.get(a);
+      if (s && s.at !== 0n && this.s.now <= s.at + CRI_WINDOW) fresh.push(s.price);
+    }
+    if (fresh.length < c.quorum) return;
+    fresh.sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+    const n = fresh.length;
+    const median = n % 2 === 1 ? fresh[(n - 1) / 2] : (fresh[n / 2 - 1] + fresh[n / 2]) / 2n;
+    let published = median;
+    if (c.price !== 0n) {
+      const hi = (c.price * (BPS + CRI_MAX_STEP_BPS)) / BPS;
+      const lo = (c.price * (BPS - CRI_MAX_STEP_BPS)) / BPS;
+      if (median > hi) published = hi;
+      else if (median < lo) published = lo;
+      if (published !== median) this.emit("ComputeReferenceIndex", "IndexClamped", { median, published });
+    }
+    c.price = published;
+    c.updatedAt = this.s.now;
+    c.sourceHash = src;
+    this.emit("ComputeReferenceIndex", "ReferenceIndexAttested", { priceUsdgPerCu: published, sourceHash: src, timestamp: this.s.now });
+  }
+
+  /** Submits a CRI-H100 price as `caller` (ComputeReferenceIndex.submit). Publication needs the attestor quorum. */
   attestReferenceIndex(caller: Address, priceUsdgPerCu: bigint, sourceHash: Hex): void {
     this.tx(() => {
-      if (lower(caller) !== this.s.addr.attestor) throw new ParonError("NotIndexAttestor");
-      if (priceUsdgPerCu === 0n) throw new ParonError("InvalidPrice");
-      const d = this.s.desk;
-      d.criH100Usdg = priceUsdgPerCu;
-      d.criUpdatedAt = this.s.now;
-      d.criSourceHash = sourceHash;
-      this.emit("ParonExchangeDesk", "ReferenceIndexAttested", { priceUsdgPerCu, sourceHash, timestamp: this.s.now });
+      const c = this.s.cri;
+      const attestor = lower(caller);
+      if (!c.attestors.includes(attestor)) throw new ParonError("NotAttestor");
+      if (priceUsdgPerCu === 0n) throw new ParonError("ZeroPrice");
+      c.subs.set(attestor, { price: priceUsdgPerCu, at: this.s.now, sourceHash });
+      this.emit("ComputeReferenceIndex", "IndexSubmitted", { attestor, priceUsdgPerCu, sourceHash });
+      this.criPublish(sourceHash);
     });
   }
 
@@ -995,7 +1051,11 @@ export class ParonLedger {
     });
   }
 
-  buySeriesOrPlaceBid(caller: Address, seriesId: number, cuAmount: bigint, maxPriceUsdg: bigint, useWifDiscount: boolean): { filledCu: bigint; orderId: number } {
+  /**
+   * @param maxWifBurn slippage cap on the $WIF taken in discount mode (default: unlimited, simulation convenience).
+   *        Contract callers always pass an explicit value; agents and the UI derive it from a quote.
+   */
+  buySeriesOrPlaceBid(caller: Address, seriesId: number, cuAmount: bigint, maxPriceUsdg: bigint, useWifDiscount: boolean, maxWifBurn: bigint = MAX_UINT256): { filledCu: bigint; orderId: number } {
     return this.tx(() => {
       const buyer = lower(caller);
       this.requireTradable(seriesId);
@@ -1034,7 +1094,7 @@ export class ParonLedger {
       if (primaryCost > 0n) this.move(this.s.usdg, buyer, this.s.addr.desk, primaryCost);
       if (filled > 0n) {
         this.cuMove(seriesId, this.s.addr.desk, buyer, filled);
-        this.chargeTakerFee(buyer, seriesId, notional, useWifDiscount);
+        this.chargeTakerFee(buyer, seriesId, notional, useWifDiscount, maxWifBurn);
       }
       let orderId = 0;
       if (remaining > 0n && remaining * maxPriceUsdg < MIN_ORDER_NOTIONAL) {
@@ -1105,14 +1165,15 @@ export class ParonLedger {
         throw new ParonError("OutsideSettlementWindow");
       }
       const d = this.s.desk;
-      if (d.criUpdatedAt === 0n || this.s.now > d.criUpdatedAt + this.s.params.maxIndexAge) throw new ParonError("StaleIndex");
+      const cri = this.s.cri;
+      if (cri.updatedAt === 0n || this.s.now > cri.updatedAt + this.s.params.maxIndexAge) throw new ParonError("StaleIndex");
       if (cuAmount === 0n) throw new ParonError("ZeroAmount");
 
       const lotId = this.assignLot(seriesId, cuAmount, 0);
       const provider = d.lots.get(lotId)!.provider;
       const { principal, margin } = this.takeLotShare(lotId, cuAmount);
       const collateral = principal + margin;
-      const gross = cuAmount * d.criH100Usdg;
+      const gross = cuAmount * cri.price;
       const settleValue = min(gross, collateral);
       const fee = (settleValue * (this.hasWifFeeDiscount(holder) ? WIF_FEE_BPS : STANDARD_FEE_BPS)) / BPS;
       const payout = settleValue - fee;
@@ -1130,7 +1191,7 @@ export class ParonLedger {
         lotId,
         holder,
         cuAmount,
-        indexPrice: d.criH100Usdg,
+        indexPrice: cri.price,
         payoutUsdg: payout,
         feeUsdg: fee,
         providerResidual: residual,
@@ -1599,7 +1660,7 @@ export class ParonLedger {
   }
 
   criIndex(): { price: bigint; updatedAt: bigint; sourceHash: Hex } {
-    return { price: this.s.desk.criH100Usdg, updatedAt: this.s.desk.criUpdatedAt, sourceHash: this.s.desk.criSourceHash };
+    return { price: this.s.cri.price, updatedAt: this.s.cri.updatedAt, sourceHash: this.s.cri.sourceHash };
   }
 
   // ==================================================================
@@ -1779,13 +1840,14 @@ export class ParonLedger {
     return filled;
   }
 
-  private chargeTakerFee(payer: Address, seriesId: number, notional: bigint, wifMode: boolean): void {
+  private chargeTakerFee(payer: Address, seriesId: number, notional: bigint, wifMode: boolean, maxWifBurn: bigint): void {
     const fee = (notional * (wifMode ? WIF_FEE_BPS : STANDARD_FEE_BPS)) / BPS;
     if (fee === 0n) return;
     let wifBurn = 0n;
     if (wifMode) {
       const burnLeg = (fee * FEE_BURN_SHARE_BPS) / BPS;
       wifBurn = (burnLeg * WIF) / this.s.vault.wifPriceUsdg;
+      if (wifBurn > maxWifBurn) throw new ParonError("WifBurnExceedsMax", { wifBurn, maxWifBurn });
       if (wifBurn > 0n) {
         this.move(this.s.wif, payer, this.s.addr.desk, wifBurn);
         this.move(this.s.usdg, payer, this.s.addr.desk, fee - burnLeg);

@@ -2565,6 +2565,19 @@ export const wifFlywheelVaultAbi = [
   },
   {
     "type": "function",
+    "name": "lastPriceUpdate",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "nativeBurn",
     "inputs": [],
     "outputs": [
@@ -3557,6 +3570,33 @@ export const wifFlywheelVaultAbi = [
         "name": "account",
         "type": "address",
         "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PriceMoveTooLarge",
+    "inputs": [
+      {
+        "name": "oldPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "newPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PriceUpdateTooSoon",
+    "inputs": [
+      {
+        "name": "availableAt",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   },
@@ -4690,7 +4730,7 @@ export const paronExchangeDeskAbi = [
         "internalType": "address"
       },
       {
-        "name": "indexAttestor_",
+        "name": "criOracle_",
         "type": "address",
         "internalType": "address"
       },
@@ -4745,24 +4785,6 @@ export const paronExchangeDeskAbi = [
   },
   {
     "type": "function",
-    "name": "attestReferenceIndex",
-    "inputs": [
-      {
-        "name": "priceUsdgPerCu",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "sourceHash",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "buySeriesOrPlaceBid",
     "inputs": [
       {
@@ -4784,6 +4806,11 @@ export const paronExchangeDeskAbi = [
         "name": "useWifDiscount",
         "type": "bool",
         "internalType": "bool"
+      },
+      {
+        "name": "maxWifBurn",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -4858,7 +4885,7 @@ export const paronExchangeDeskAbi = [
     "inputs": [],
     "outputs": [
       {
-        "name": "",
+        "name": "p",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -4867,13 +4894,13 @@ export const paronExchangeDeskAbi = [
   },
   {
     "type": "function",
-    "name": "criSourceHash",
+    "name": "criOracle",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "bytes32",
-        "internalType": "bytes32"
+        "type": "address",
+        "internalType": "contract IComputeReferenceIndex"
       }
     ],
     "stateMutability": "view"
@@ -4884,7 +4911,7 @@ export const paronExchangeDeskAbi = [
     "inputs": [],
     "outputs": [
       {
-        "name": "",
+        "name": "t",
         "type": "uint64",
         "internalType": "uint64"
       }
@@ -5460,19 +5487,6 @@ export const paronExchangeDeskAbi = [
   },
   {
     "type": "function",
-    "name": "indexAttestor",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "isDisputable",
     "inputs": [
       {
@@ -5842,19 +5856,6 @@ export const paronExchangeDeskAbi = [
   },
   {
     "type": "function",
-    "name": "setIndexAttestor",
-    "inputs": [
-      {
-        "name": "attestor",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "setJury",
     "inputs": [
       {
@@ -6111,19 +6112,6 @@ export const paronExchangeDeskAbi = [
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "IndexAttestorSet",
-    "inputs": [
-      {
-        "name": "attestor",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -6421,31 +6409,6 @@ export const paronExchangeDeskAbi = [
   },
   {
     "type": "event",
-    "name": "ReferenceIndexAttested",
-    "inputs": [
-      {
-        "name": "priceUsdgPerCu",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "sourceHash",
-        "type": "bytes32",
-        "indexed": false,
-        "internalType": "bytes32"
-      },
-      {
-        "name": "timestamp",
-        "type": "uint64",
-        "indexed": false,
-        "internalType": "uint64"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "Trade",
     "inputs": [
       {
@@ -6547,44 +6510,12 @@ export const paronExchangeDeskAbi = [
   },
   {
     "type": "error",
-    "name": "LotCapacity",
-    "inputs": [
-      {
-        "name": "lotId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
-    "name": "NoLotCapacity",
-    "inputs": [
-      {
-        "name": "seriesId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "cuAmount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
     "name": "NotDeployer",
     "inputs": []
   },
   {
     "type": "error",
     "name": "NotHolder",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "NotIndexAttestor",
     "inputs": []
   },
   {
@@ -6692,6 +6623,22 @@ export const paronExchangeDeskAbi = [
     "inputs": [
       {
         "name": "lotId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "WifBurnExceedsMax",
+    "inputs": [
+      {
+        "name": "wifBurn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxWifBurn",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -6813,5 +6760,587 @@ export const paronExchangeDeskAbi = [
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "LotCapacity",
+    "inputs": [
+      {
+        "name": "lotId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NoLotCapacity",
+    "inputs": [
+      {
+        "name": "seriesId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "cuAmount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  }
+] as const;
+
+export const computeReferenceIndexAbi = [
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "owner_",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "attestors_",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "quorum_",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "maxStepBps_",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "minInterval_",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "submissionWindow_",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "MAX_ATTESTORS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "addAttestor",
+    "inputs": [
+      {
+        "name": "attestor",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "attestorCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "attestors",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]",
+        "internalType": "address[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isAttestor",
+    "inputs": [
+      {
+        "name": "attestor",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "latest",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "maxStepBps",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "minInterval",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "owner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingMedian",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "median",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "fresh",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "price",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "quorum",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "removeAttestor",
+    "inputs": [
+      {
+        "name": "attestor",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "renounceOwnership",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setQuorum",
+    "inputs": [
+      {
+        "name": "quorum_",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "sourceHash",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "submissionOf",
+    "inputs": [
+      {
+        "name": "attestor",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "price",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "at",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "sourceHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "submissionWindow",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "submit",
+    "inputs": [
+      {
+        "name": "priceUsdgPerCu",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "sourceHash_",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "transferOwnership",
+    "inputs": [
+      {
+        "name": "newOwner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "updatedAt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "AttestorAdded",
+    "inputs": [
+      {
+        "name": "attestor",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "AttestorRemoved",
+    "inputs": [
+      {
+        "name": "attestor",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "IndexClamped",
+    "inputs": [
+      {
+        "name": "median",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "published",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "IndexSubmitted",
+    "inputs": [
+      {
+        "name": "attestor",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "priceUsdgPerCu",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "sourceHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OwnershipTransferred",
+    "inputs": [
+      {
+        "name": "previousOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "QuorumSet",
+    "inputs": [
+      {
+        "name": "quorum",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ReferenceIndexAttested",
+    "inputs": [
+      {
+        "name": "priceUsdgPerCu",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "sourceHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "timestamp",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AlreadyAttestor",
+    "inputs": [
+      {
+        "name": "attestor",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidParams",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidQuorum",
+    "inputs": [
+      {
+        "name": "quorum",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "attestors",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotAttestor",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OwnableInvalidOwner",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OwnableUnauthorizedAccount",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TooManyAttestors",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "UnknownAttestor",
+    "inputs": [
+      {
+        "name": "attestor",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ZeroAddress",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroPrice",
+    "inputs": []
   }
 ] as const;

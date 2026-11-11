@@ -54,6 +54,15 @@ export const JURY_WIF_BONUS_BPS = 1_000n;
 export const DISPUTE_FILING_BURN = 100n * WIF;
 export const BUYBACK_SELL_DISCOUNT_BPS = 100n;
 
+// Oracles (mirrors ComputeReferenceIndex and the vault's $WIF price bounds)
+export const CRI_MAX_STEP_BPS = 1_000n; // each publication moves the index at most +-10%
+export const CRI_MIN_INTERVAL = 3_600n;
+export const CRI_WINDOW = 6n * 3_600n;
+export const CRI_MAX_ATTESTORS = 9;
+export const WIF_PRICE_MAX_MOVE_BPS = 1_000n;
+export const WIF_PRICE_MIN_INTERVAL = 3_600n;
+export const MAX_UINT256 = (1n << 256n) - 1n;
+
 // Market structure
 export const PRICE_TICK = 10_000n; // 0.01 USDG
 export const MAX_LEVELS = 24;
