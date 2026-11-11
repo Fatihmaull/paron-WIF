@@ -30,6 +30,7 @@ contract WifFlywheelVault is ReentrancyGuard, Ownable {
     address public priceOracle;
     /// @notice Reference price in USDG (6 decimals) for 1 $WIF. Testnet: oracle-posted. Mainnet: DEX TWAP keeper.
     uint256 public wifPriceUsdg;
+    uint256 public lastPriceUpdate;
 
     address public desk;
     address public jury;
@@ -86,6 +87,8 @@ contract WifFlywheelVault is ReentrancyGuard, Ownable {
     error NotDesk();
     error NotOracle();
     error InvalidPrice();
+    error PriceUpdateTooSoon(uint256 availableAt);
+    error PriceMoveTooLarge(uint256 oldPrice, uint256 newPrice);
     error InsufficientStake(uint256 staked, uint256 requested);
     error StakeLocked(uint256 lockAmount);
     error InsufficientBuybackPool(uint256 available, uint256 needed);
@@ -107,6 +110,7 @@ contract WifFlywheelVault is ReentrancyGuard, Ownable {
         treasury = treasury_;
         priceOracle = owner_;
         wifPriceUsdg = wifPrice_;
+        lastPriceUpdate = block.timestamp;
     }
 
     // ------------------------------------------------------------------
@@ -136,7 +140,15 @@ contract WifFlywheelVault is ReentrancyGuard, Ownable {
     function setWifPrice(uint256 priceUsdg) external {
         if (msg.sender != priceOracle) revert NotOracle();
         if (priceUsdg == 0) revert InvalidPrice();
+        uint256 availableAt = lastPriceUpdate + C.WIF_PRICE_MIN_INTERVAL;
+        if (block.timestamp < availableAt) revert PriceUpdateTooSoon(availableAt);
+        uint256 old = wifPriceUsdg;
+        if (
+            priceUsdg > (old * (C.BPS + C.WIF_PRICE_MAX_MOVE_BPS)) / C.BPS
+                || priceUsdg < (old * (C.BPS - C.WIF_PRICE_MAX_MOVE_BPS)) / C.BPS
+        ) revert PriceMoveTooLarge(old, priceUsdg);
         wifPriceUsdg = priceUsdg;
+        lastPriceUpdate = block.timestamp;
         emit WifPriceUpdated(priceUsdg);
     }
 
