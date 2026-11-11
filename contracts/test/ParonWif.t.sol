@@ -169,7 +169,7 @@ contract ParonWifTest is ParonWifBase {
         address buyer = _actor("almost", 9_999e18, 1_000e6);
         vm.prank(buyer);
         vm.expectRevert(ParonExchangeDesk.NotWifDiscountEligible.selector);
-        desk.buySeriesOrPlaceBid(seriesJkt, 1, 2_000_000, true);
+        desk.buySeriesOrPlaceBid(seriesJkt, 1, 2_000_000, true, MAX);
         // Staking counts towards the threshold too.
         _fund(buyer, 1e18, 0);
         vm.prank(buyer);

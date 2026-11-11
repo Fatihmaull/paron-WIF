@@ -132,7 +132,7 @@ abstract contract ParonWifBase is Test {
         returns (uint256 filled, uint256 orderId)
     {
         vm.prank(who);
-        (filled, orderId) = desk.buySeriesOrPlaceBid(seriesId, cu, maxPrice, wifMode);
+        (filled, orderId) = desk.buySeriesOrPlaceBid(seriesId, cu, maxPrice, wifMode, MAX);
     }
 
     function _sign(uint256 pk, bytes32 digest) internal pure returns (bytes memory) {

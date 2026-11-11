@@ -159,6 +159,7 @@ contract ParonExchangeDesk is ReentrancyGuard {
     error SelfTrade();
     error OrderNotActive(uint256 orderId);
     error OrderTooSmall(uint256 notional, uint256 minNotional);
+    error WifBurnExceedsMax(uint256 wifBurn, uint256 maxWifBurn);
     error NotOrderMaker();
     error OutsideDeliveryWindow();
     error OutsideSettlementWindow();
@@ -317,7 +318,16 @@ contract ParonExchangeDesk is ReentrancyGuard {
     /// @notice Buys up to `cuAmount` CU at or below `maxPriceUsdg` (price-time priority) and rests any
     ///         remainder as a bid. Discount mode charges 10 bps and burns the fee's 50% leg from the
     ///         buyer's own $WIF; standard mode charges 30 bps in USDG and burns via the buyback desk.
-    function buySeriesOrPlaceBid(uint256 seriesId, uint256 cuAmount, uint256 maxPriceUsdg, bool useWifDiscount)
+    /// @param maxWifBurn Slippage cap on the $WIF taken from the buyer in discount mode. The burn amount is derived
+    ///        from the oracle's $WIF price, so a stale or manipulated price reverts with WifBurnExceedsMax instead of
+    ///        spending more $WIF than the buyer agreed to. Ignored when `useWifDiscount` is false.
+    function buySeriesOrPlaceBid(
+        uint256 seriesId,
+        uint256 cuAmount,
+        uint256 maxPriceUsdg,
+        bool useWifDiscount,
+        uint256 maxWifBurn
+    )
         external
         nonReentrant
         returns (uint256 filledCu, uint256 orderId)
@@ -341,7 +351,7 @@ contract ParonExchangeDesk is ReentrancyGuard {
         if (ctx.primaryCost > 0) usdg.safeTransferFrom(msg.sender, address(this), ctx.primaryCost);
         if (ctx.filled > 0) {
             series.deskTransfer(address(this), msg.sender, seriesId, ctx.filled);
-            _chargeTakerFee(msg.sender, seriesId, ctx.notional, useWifDiscount);
+            _chargeTakerFee(msg.sender, seriesId, ctx.notional, useWifDiscount, maxWifBurn);
         }
         filledCu = ctx.filled;
         if (ctx.remaining > 0 && ctx.remaining * maxPriceUsdg < C.MIN_ORDER_NOTIONAL) {
@@ -703,13 +713,16 @@ contract ParonExchangeDesk is ReentrancyGuard {
         }
     }
 
-    function _chargeTakerFee(address payer, uint256 seriesId, uint256 notional, bool wifMode) private {
+    function _chargeTakerFee(address payer, uint256 seriesId, uint256 notional, bool wifMode, uint256 maxWifBurn)
+        private
+    {
         uint256 fee = (notional * (wifMode ? C.WIF_FEE_BPS : C.STANDARD_FEE_BPS)) / C.BPS;
         if (fee == 0) return;
         uint256 wifBurn;
         if (wifMode) {
             uint256 burnLeg = (fee * C.FEE_BURN_SHARE_BPS) / C.BPS;
             wifBurn = (burnLeg * C.WIF_UNIT) / vault.wifPriceUsdg();
+            if (wifBurn > maxWifBurn) revert WifBurnExceedsMax(wifBurn, maxWifBurn);
             if (wifBurn > 0) {
                 wif.safeTransferFrom(payer, address(this), wifBurn);
                 usdg.safeTransferFrom(payer, address(this), fee - burnLeg);

@@ -153,12 +153,12 @@ contract DeployParonWif is Script {
         desk.mintPrimarySeries(d.seriesSgp, 400, 2_310_000);
         desk.mintPrimarySeries(d.seriesSgp, 250, 2_350_000);
         // Resting bids below the asks
-        desk.buySeriesOrPlaceBid(d.seriesJkt, 300, 2_140_000, true);
-        desk.buySeriesOrPlaceBid(d.seriesJkt, 500, 2_110_000, true);
-        desk.buySeriesOrPlaceBid(d.seriesBtm, 250, 2_190_000, true);
-        desk.buySeriesOrPlaceBid(d.seriesBtm, 400, 2_160_000, true);
-        desk.buySeriesOrPlaceBid(d.seriesSgp, 200, 2_260_000, true);
-        desk.buySeriesOrPlaceBid(d.seriesSgp, 300, 2_220_000, true);
+        desk.buySeriesOrPlaceBid(d.seriesJkt, 300, 2_140_000, true, type(uint256).max);
+        desk.buySeriesOrPlaceBid(d.seriesJkt, 500, 2_110_000, true, type(uint256).max);
+        desk.buySeriesOrPlaceBid(d.seriesBtm, 250, 2_190_000, true, type(uint256).max);
+        desk.buySeriesOrPlaceBid(d.seriesBtm, 400, 2_160_000, true, type(uint256).max);
+        desk.buySeriesOrPlaceBid(d.seriesSgp, 200, 2_260_000, true, type(uint256).max);
+        desk.buySeriesOrPlaceBid(d.seriesSgp, 300, 2_220_000, true, type(uint256).max);
     }
 
     function _writeManifest(
